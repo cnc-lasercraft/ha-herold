@@ -530,9 +530,23 @@ class HeroldAdminCard extends HTMLElement {
           d.producer_default?.length > 0
             ? d.producer_default.map((r) => `<span class="chip default">${r}</span>`).join("")
             : '<span class="dim">—</span>';
+        // Topic-Eigenschaften als Read-Only-Info anzeigen
+        const t = this._topics().find((x) => x.id === d.id);
+        const topicFlags = [];
+        if (t?.severity)
+          topicFlags.push(`<span class="sev sev-${t.severity}">${t.severity}</span>`);
+        if (t?.log_only) topicFlags.push(`<span class="chip">🔇 log_only</span>`);
+        if (t?.interruption_level)
+          topicFlags.push(`<span class="chip override">🔔 ${t.interruption_level}</span>`);
+        const flagsHtml = topicFlags.length
+          ? topicFlags.join(" ")
+          : '<span class="dim">—</span>';
         form = `
           <div class="readonly">
             <span class="lbl">Topic</span> <span class="mono">${d.id}</span>
+          </div>
+          <div class="readonly">
+            <span class="lbl">Topic-Eigenschaften</span> ${flagsHtml}
           </div>
           <div class="readonly">
             <span class="lbl">Producer-Default</span> ${producerDefault}
@@ -540,6 +554,10 @@ class HeroldAdminCard extends HTMLElement {
           <label><span class="lbl-text">Admin-Override</span> <span class="hint">(leere Auswahl = kein Override, Producer-Default greift)</span>
             <select id="f-override" multiple size="6">${rollenOpts}</select>
           </label>
+          <div class="hint-link">
+            Severity, log_only und iOS Interruption-Level werden im
+            <a data-open-topic="${d.id}">Topic-Editor</a> gesetzt.
+          </div>
         `;
         break;
       }
@@ -630,6 +648,14 @@ class HeroldAdminCard extends HTMLElement {
     if (saveBtn) saveBtn.addEventListener("click", () => this._saveCurrentEdit());
     const delBtn = sr.querySelector("[data-delete]");
     if (delBtn) delBtn.addEventListener("click", () => this._deleteCurrentEdit());
+    sr.querySelectorAll("[data-open-topic]").forEach((a) =>
+      a.addEventListener("click", () => {
+        const topicId = a.dataset.openTopic;
+        this._editing = null;
+        this._activeTab = "topics";
+        this._openTopicEdit(topicId);
+      })
+    );
   }
 
   // ------------------------------------------------------------------
@@ -962,6 +988,8 @@ class HeroldAdminCard extends HTMLElement {
       .dialog-body .hint { color: var(--secondary-text-color); font-weight: 400; font-size: 11px; font-style: italic; }
       .dialog-body .readonly { background: var(--secondary-background-color, #f5f5f5); padding: 8px 10px; border-radius: 6px; }
       .dialog-body .readonly .lbl { color: var(--secondary-text-color); font-size: 12px; margin-right: 6px; }
+      .dialog-body .hint-link { font-size: 12px; color: var(--secondary-text-color); font-style: italic; padding-top: 4px; }
+      .dialog-body .hint-link a { color: var(--primary-color, #03a9f4); cursor: pointer; text-decoration: underline; }
 
       .dialog-actions { display: flex; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--divider-color, #eee); align-items: center; }
       .dialog-actions .grow { flex: 1; }
