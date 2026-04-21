@@ -1,0 +1,13 @@
+{
+  "domain": "herold",
+  "name": "Herold",
+  "version": "0.1.0",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/cnc-lasercraft/ha-herold",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/cnc-lasercraft/ha-herold/issues",
+  "requirements": []
+}

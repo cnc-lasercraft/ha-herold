@@ -1,0 +1,134 @@
+{
+  "title": "Herold",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Herold",
+        "description": "Herold routes messages to roles (Pub/Sub + RBAC). Setup is empty — use the Configure button after installation to manage topics, roles and recipients."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Herold is already set up — only one instance is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Manage Herold",
+        "description": "What would you like to manage?",
+        "menu_options": {
+          "topics": "Topics",
+          "rollen": "Roles",
+          "empfaenger": "Recipients",
+          "mapping": "Topic-to-role mapping",
+          "einstellungen": "Settings (fallback, retention)"
+        }
+      },
+      "topics": {
+        "title": "Topics — selection",
+        "description": "{anzahl} topics registered. Pick one to edit or add a new one.",
+        "data": {
+          "topic": "Topic"
+        }
+      },
+      "topic_edit": {
+        "title": "Topic {modus} — {topic_id}",
+        "description": "With log_only, messages go only to history and events (no push, no last-resort notification).",
+        "data": {
+          "id": "Topic ID (lowercase, digits, _ and /)",
+          "name": "Display name",
+          "beschreibung": "Description",
+          "quelle": "Source (producer identifier)",
+          "default_severity": "Default severity",
+          "default_rollen": "Default roles",
+          "log_only": "Log only (no delivery)",
+          "_loeschen": "⚠️ Delete this topic (incl. role mapping)"
+        }
+      },
+      "rollen": {
+        "title": "Roles — selection",
+        "description": "{anzahl} roles defined. Pick one to edit or add a new one.",
+        "data": {
+          "rolle": "Role"
+        }
+      },
+      "rolle_edit": {
+        "title": "Role {modus} — {rolle_id}",
+        "description": "Members are recipient IDs. Deleting the role cleans it out of topics, admin overrides and the fallback role.",
+        "data": {
+          "id": "Role ID",
+          "name": "Display name",
+          "mitglieder": "Members (recipients)",
+          "_loeschen": "⚠️ Delete this role"
+        }
+      },
+      "empfaenger": {
+        "title": "Recipients — selection",
+        "description": "{anzahl} recipients registered. Pick one to edit or add a new one.",
+        "data": {
+          "empfaenger": "Recipient"
+        }
+      },
+      "empfaenger_edit": {
+        "title": "Recipient {modus} — {empfaenger_id}",
+        "description": "Target = notify service (e.g. notify.mobile_app_iphone_17_ul). Deleting removes the recipient from all roles.",
+        "data": {
+          "id": "Recipient ID",
+          "typ": "Type",
+          "ziel": "Target (domain.service, e.g. notify.mobile_app_xxx)",
+          "name": "Display name",
+          "_loeschen": "⚠️ Delete this recipient"
+        }
+      },
+      "mapping": {
+        "title": "Topic-to-role mapping",
+        "description": "Admin override per topic. Override takes precedence over producer defaults.",
+        "data": {
+          "topic": "Topic"
+        }
+      },
+      "mapping_edit": {
+        "title": "Mapping for {topic_id}",
+        "description": "Producer default for this topic: {producer_default}. Empty role list or reset removes the override — producer defaults apply again.",
+        "data": {
+          "rollen": "Override roles",
+          "_zuruecksetzen": "Remove override (producer defaults apply again)"
+        }
+      },
+      "einstellungen": {
+        "title": "Global settings",
+        "description": "Fallback role kicks in when a topic has no roles. Retention controls the daily history cleanup (03:00).",
+        "data": {
+          "fallback_rolle": "Fallback role",
+          "retention_eintraege": "Max entries (retention)",
+          "retention_tage": "Max age in days (retention)"
+        }
+      }
+    },
+    "error": {
+      "required": "Required",
+      "invalid_topic_id": "Invalid topic id — only lowercase, digits, underscore and slash allowed",
+      "topic_exists": "Topic already exists — pick another id or edit the existing one",
+      "rolle_exists": "Role already exists",
+      "empfaenger_exists": "Recipient already exists",
+      "invalid_ziel": "Invalid target — expected domain.service (e.g. notify.mobile_app_xxx)",
+      "rolle_unbekannt": "Role is not registered"
+    },
+    "abort": {
+      "phase2_pending": "This management UI is coming in a later phase — until then, please use the services under Developer Tools.",
+      "topic_not_found": "Topic was removed in the meantime.",
+      "rolle_not_found": "Role was removed in the meantime.",
+      "empfaenger_not_found": "Recipient was removed in the meantime.",
+      "keine_topics": "No topics registered yet."
+    }
+  },
+  "selector": {
+    "severity": {
+      "options": {
+        "info": "info",
+        "warnung": "warning",
+        "kritisch": "critical"
+      }
+    }
+  }
+}

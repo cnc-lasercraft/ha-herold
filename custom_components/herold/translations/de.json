@@ -1,0 +1,134 @@
+{
+  "title": "Herold",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Herold einrichten",
+        "description": "Herold vermittelt Meldungen an Rollen (Pub/Sub + RBAC). Der Setup ist leer — die eigentliche Verwaltung erfolgt nach der Installation über den Konfigurieren-Button."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Herold ist bereits eingerichtet — es darf nur eine Instanz geben."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Herold verwalten",
+        "description": "Was möchtest du verwalten?",
+        "menu_options": {
+          "topics": "Topics",
+          "rollen": "Rollen",
+          "empfaenger": "Empfänger",
+          "mapping": "Topic-Rollen-Zuordnung",
+          "einstellungen": "Einstellungen (Fallback, Retention)"
+        }
+      },
+      "topics": {
+        "title": "Topics — Auswahl",
+        "description": "{anzahl} Topics registriert. Wähle ein Topic zum Bearbeiten oder lege ein neues an.",
+        "data": {
+          "topic": "Topic"
+        }
+      },
+      "topic_edit": {
+        "title": "Topic {modus} — {topic_id}",
+        "description": "Bei log_only werden Meldungen nur in History + Event geschrieben (kein Push, kein Last-Resort).",
+        "data": {
+          "id": "Topic-ID (Kleinbuchstaben, Ziffern, _ und /)",
+          "name": "Anzeigename",
+          "beschreibung": "Beschreibung",
+          "quelle": "Quelle (Producer-Kennung)",
+          "default_severity": "Default-Severity",
+          "default_rollen": "Default-Rollen",
+          "log_only": "Nur Log (keine Zustellung)",
+          "_loeschen": "⚠️ Dieses Topic löschen (inkl. Rollen-Mapping)"
+        }
+      },
+      "rollen": {
+        "title": "Rollen — Auswahl",
+        "description": "{anzahl} Rollen definiert. Wähle eine zum Bearbeiten oder lege eine neue an.",
+        "data": {
+          "rolle": "Rolle"
+        }
+      },
+      "rolle_edit": {
+        "title": "Rolle {modus} — {rolle_id}",
+        "description": "Mitglieder sind Empfänger-IDs. Wird die Rolle gelöscht, wird sie aus allen Topics, Admin-Mappings und der Fallback-Rolle bereinigt.",
+        "data": {
+          "id": "Rollen-ID",
+          "name": "Anzeigename",
+          "mitglieder": "Mitglieder (Empfänger)",
+          "_loeschen": "⚠️ Diese Rolle löschen"
+        }
+      },
+      "empfaenger": {
+        "title": "Empfänger — Auswahl",
+        "description": "{anzahl} Empfänger registriert. Wähle einen zum Bearbeiten oder lege einen neuen an.",
+        "data": {
+          "empfaenger": "Empfänger"
+        }
+      },
+      "empfaenger_edit": {
+        "title": "Empfänger {modus} — {empfaenger_id}",
+        "description": "Ziel = Notify-Service (z.B. notify.mobile_app_iphone_17_ul). Beim Löschen wird der Empfänger aus allen Rollen entfernt.",
+        "data": {
+          "id": "Empfänger-ID",
+          "typ": "Typ",
+          "ziel": "Ziel (domain.service, z.B. notify.mobile_app_xxx)",
+          "name": "Anzeigename",
+          "_loeschen": "⚠️ Diesen Empfänger löschen"
+        }
+      },
+      "mapping": {
+        "title": "Topic-Rollen-Zuordnung",
+        "description": "Admin-Override pro Topic. Override hat Vorrang vor Producer-Defaults.",
+        "data": {
+          "topic": "Topic"
+        }
+      },
+      "mapping_edit": {
+        "title": "Mapping für {topic_id}",
+        "description": "Producer-Default dieses Topics: {producer_default}. Leere Rollen-Liste oder Zurücksetzen entfernt das Override — dann greifen wieder die Producer-Defaults.",
+        "data": {
+          "rollen": "Override-Rollen",
+          "_zuruecksetzen": "Override entfernen (Producer-Defaults greifen wieder)"
+        }
+      },
+      "einstellungen": {
+        "title": "Globale Einstellungen",
+        "description": "Fallback-Rolle greift wenn ein Topic keine Rollen hat. Retention steuert den täglichen History-Cleanup (03:00).",
+        "data": {
+          "fallback_rolle": "Fallback-Rolle",
+          "retention_eintraege": "Max. Einträge (Retention)",
+          "retention_tage": "Max. Alter in Tagen (Retention)"
+        }
+      }
+    },
+    "error": {
+      "required": "Pflichtfeld",
+      "invalid_topic_id": "Ungültige Topic-ID — erlaubt sind Kleinbuchstaben, Ziffern, Unterstrich und Slash",
+      "topic_exists": "Topic existiert bereits — wähle einen anderen Namen oder bearbeite das bestehende",
+      "rolle_exists": "Rolle existiert bereits",
+      "empfaenger_exists": "Empfänger existiert bereits",
+      "invalid_ziel": "Ungültiges Ziel — erwartet wird domain.service (z.B. notify.mobile_app_xxx)",
+      "rolle_unbekannt": "Rolle ist nicht registriert"
+    },
+    "abort": {
+      "phase2_pending": "Diese Verwaltungs-Oberfläche kommt in einer späteren Phase — bis dahin bitte die Services unter Entwicklerwerkzeuge nutzen.",
+      "topic_not_found": "Topic wurde in der Zwischenzeit entfernt.",
+      "rolle_not_found": "Rolle wurde in der Zwischenzeit entfernt.",
+      "empfaenger_not_found": "Empfänger wurde in der Zwischenzeit entfernt.",
+      "keine_topics": "Es sind noch keine Topics registriert."
+    }
+  },
+  "selector": {
+    "severity": {
+      "options": {
+        "info": "info",
+        "warnung": "warnung",
+        "kritisch": "kritisch"
+      }
+    }
+  }
+}

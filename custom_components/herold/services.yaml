@@ -1,0 +1,335 @@
+senden:
+  name: Meldung senden
+  description: >
+    Sendet eine Meldung an alle Rollen, die dem Topic zugeordnet sind.
+    Hauptaufruf aus Automationen, Scripts und Custom Components.
+  fields:
+    topic:
+      name: Topic
+      description: "Topic-ID, Regex ^[a-z0-9_/]+$, z.B. pool/ph/niedrig"
+      required: true
+      example: pool/ph/niedrig
+      selector:
+        text:
+    titel:
+      name: Titel
+      description: Kurzer Titel für die Notification
+      required: true
+      example: Pool-PH zu niedrig
+      selector:
+        text:
+    message:
+      name: Nachricht
+      description: Ausführlicher Text
+      example: PH liegt bei 6.8 (Soll 7.0–7.4)
+      selector:
+        text:
+          multiline: true
+    severity:
+      name: Severity
+      description: Dringlichkeit — wird als Metadatum mitgeführt und beeinflusst den Empfänger-Payload
+      default: info
+      selector:
+        select:
+          options:
+            - info
+            - warnung
+            - kritisch
+    actions:
+      name: Actions
+      description: Actionable-Notification-Buttons (HA-Notify-Action-Format, Passthrough)
+      default: []
+      selector:
+        object:
+    extra_rollen:
+      name: Zusätzliche Rollen
+      description: Rollen, die ad-hoc zusätzlich benachrichtigt werden sollen
+      default: []
+      selector:
+        object:
+    payload:
+      name: Payload
+      description: Passthrough-Daten für Notify-Kanal (Bilder, Sound, etc.)
+      default: {}
+      selector:
+        object:
+
+topic_registrieren:
+  name: Topic registrieren
+  description: >
+    Registriert ein Topic mit Metadaten. Idempotent mit Update —
+    existiert das Topic, werden die übergebenen Felder aktualisiert.
+    Producer ruft dies typischerweise beim Startup auf.
+  fields:
+    topic:
+      name: Topic
+      required: true
+      example: pool/ph/niedrig
+      selector:
+        text:
+    name:
+      name: Anzeigename
+      example: Pool-PH zu niedrig
+      selector:
+        text:
+    beschreibung:
+      name: Beschreibung
+      example: Der PH-Wert des Pools liegt unter dem Schwellwert
+      selector:
+        text:
+          multiline: true
+    quelle:
+      name: Quelle
+      description: Name des Producers (Automation, Script, CC)
+      example: custom_components.pool
+      selector:
+        text:
+    default_severity:
+      name: Default-Severity
+      selector:
+        select:
+          options:
+            - info
+            - warnung
+            - kritisch
+    default_rollen:
+      name: Default-Rollen
+      description: Rollen, die standardmässig benachrichtigt werden
+      selector:
+        object:
+    log_only:
+      name: Nur Log
+      description: >
+        Wenn aktiv, wird die Meldung ausschliesslich in die History geschrieben
+        und als Event gefeuert — keine Push-Zustellung, kein Last-Resort-
+        persistent_notification. Erlaubt gesprächige Topics ohne Spam-Risiko.
+      default: false
+      selector:
+        boolean:
+
+topic_entfernen:
+  name: Topic entfernen
+  description: >
+    Löscht ein Topic (und sein Rollen-Mapping) dauerhaft aus dem Config-Store.
+    Historie-Einträge bleiben erhalten.
+  fields:
+    topic:
+      name: Topic
+      required: true
+      example: test/obsolet
+      selector:
+        text:
+
+rolle_setzen:
+  name: Rolle setzen
+  description: >
+    Definiert eine Rolle und ihre Mitglieder (Empfänger-IDs).
+    Admin-Operation — normalerweise via Config Flow, für Scripting aber auch via Service.
+  fields:
+    rolle:
+      name: Rollen-ID
+      required: true
+      example: erwachsener
+      selector:
+        text:
+    name:
+      name: Anzeigename
+      example: Erwachsene
+      selector:
+        text:
+    mitglieder:
+      name: Mitglieder
+      description: Liste der Empfänger-IDs
+      required: true
+      example: "[iphone_17_ul, admin_mail]"
+      selector:
+        object:
+
+empfaenger_setzen:
+  name: Empfänger setzen
+  description: >
+    Registriert einen Empfänger (Notify-Ziel) mit optionalem Severity-Payload.
+    Admin-Operation — normalerweise via Config Flow, für Scripting auch via Service.
+  fields:
+    empfaenger:
+      name: Empfänger-ID
+      required: true
+      example: iphone_17_ul
+      selector:
+        text:
+    typ:
+      name: Typ
+      description: Empfänger-Typ (MVP nur notify_service)
+      required: true
+      default: notify_service
+      selector:
+        select:
+          options:
+            - notify_service
+    ziel:
+      name: Ziel
+      description: Notify-Service-Entität (z.B. notify.mobile_app_iphone_17_ul)
+      required: true
+      example: notify.mobile_app_iphone_17_ul
+      selector:
+        text:
+    name:
+      name: Anzeigename
+      example: iPhone Urs
+      selector:
+        text:
+    severity_payload:
+      name: Severity-Payload
+      description: "Payload-Override pro Severity: {info: {...}, warnung: {...}, kritisch: {...}}"
+      default: {}
+      selector:
+        object:
+
+rolle_entfernen:
+  name: Rolle entfernen
+  description: >
+    Löscht eine Rolle. Wird aus allen Topic-Defaults, Admin-Mappings und
+    der Fallback-Rolle bereinigt. Empfänger-Registry bleibt unangetastet.
+  fields:
+    rolle:
+      name: Rollen-ID
+      required: true
+      example: erwachsener
+      selector:
+        text:
+
+empfaenger_entfernen:
+  name: Empfänger entfernen
+  description: >
+    Löscht einen Empfänger aus der Registry. Wird aus allen Rollen-
+    Mitgliedslisten bereinigt.
+  fields:
+    empfaenger:
+      name: Empfänger-ID
+      required: true
+      example: iphone_17_ul
+      selector:
+        text:
+
+topic_rolle_mapping:
+  name: Topic-Rollen-Zuordnung (Admin-Override)
+  description: >
+    Setzt oder löscht das Admin-Override für ein Topic. Hat Vorrang vor
+    Producer-Defaults. Leere Rollen-Liste oder zuruecksetzen=true entfernen
+    das Override — dann greifen wieder die Producer-Defaults.
+  fields:
+    topic:
+      name: Topic
+      required: true
+      example: pool/ph/niedrig
+      selector:
+        text:
+    rollen:
+      name: Rollen
+      description: Rollen-IDs die benachrichtigt werden sollen
+      default: []
+      selector:
+        object:
+    zuruecksetzen:
+      name: Zurücksetzen
+      description: Override löschen — Producer-Defaults greifen wieder
+      default: false
+      selector:
+        boolean:
+
+einstellungen_setzen:
+  name: Einstellungen setzen
+  description: >
+    Aktualisiert globale Einstellungen: Fallback-Rolle (greift wenn ein Topic
+    keine Rollen zugeordnet hat), Retention-Grenzen für History-Cleanup.
+  fields:
+    fallback_rolle:
+      name: Fallback-Rolle
+      description: Rollen-ID oder leer für "keine Fallback-Rolle"
+      example: techn_support
+      selector:
+        text:
+    retention_eintraege:
+      name: Max. Einträge (Retention)
+      example: 2000
+      selector:
+        number:
+          min: 1
+          max: 100000
+          mode: box
+    retention_tage:
+      name: Max. Alter in Tagen (Retention)
+      example: 30
+      selector:
+        number:
+          min: 1
+          max: 3650
+          mode: box
+
+history_abfragen:
+  name: History abfragen
+  description: Liefert Log-Einträge gefiltert nach Topic, Severity, Rolle, Zeitraum.
+  fields:
+    topic:
+      name: Topic-Filter
+      description: Exakter Match, oder Prefix mit /*
+      example: pool/*
+      selector:
+        text:
+    severity:
+      name: Severity-Filter
+      selector:
+        select:
+          options:
+            - info
+            - warnung
+            - kritisch
+    rolle:
+      name: Rolle-Filter
+      example: erwachsener
+      selector:
+        text:
+    zeitraum_von:
+      name: Von (ISO 8601)
+      example: "2026-04-01T00:00:00+02:00"
+      selector:
+        text:
+    zeitraum_bis:
+      name: Bis (ISO 8601)
+      example: "2026-04-16T23:59:59+02:00"
+      selector:
+        text:
+    limit:
+      name: Max. Anzahl
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 10000
+          mode: box
+
+history_aufraeumen:
+  name: History aufräumen
+  description: >
+    Entfernt alte oder überzählige History-Einträge. Läuft automatisch täglich
+    um 03:00 — dieser Service erlaubt manuelles Auslösen oder Override der
+    Grenzen. Ohne Parameter werden die konfigurierten Retention-Werte genutzt.
+  fields:
+    max_eintraege:
+      name: Max. Einträge
+      description: Maximale Anzahl Einträge (ältere werden entfernt). Default aus Config.
+      example: 2000
+      selector:
+        number:
+          min: 1
+          max: 100000
+          mode: box
+    max_tage:
+      name: Max. Alter (Tage)
+      description: Einträge älter als N Tage werden entfernt. Default aus Config.
+      example: 30
+      selector:
+        number:
+          min: 1
+          max: 3650
+          mode: box
