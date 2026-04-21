@@ -71,6 +71,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 **Hinweis:** `topic_registrieren` ist idempotent mit Update — bei jedem HA-Restart werden die Topics neu registriert und die Metadaten aufgefrischt. Das ist gewollt.
 
+### `log_only`-Topics (gesprächige Producer ohne Spam-Risiko)
+
+Für Topics, die **nur protokolliert** werden sollen (Debug-Output, Regelungs-Schritte, Status-Tracking), ohne dass Push-Nachrichten rausgehen:
+
+```python
+TOPICS = {
+    "pool/regelung/schritt": {
+        "name": "Pool-Regelung Schritt",
+        "beschreibung": "Einzelner Regelungs-Schritt (nur Log)",
+        "default_severity": "info",
+        "log_only": True,   # ← keine Zustellung, nur History + Event
+    },
+}
+```
+
+**Effekt bei `herold.senden`:** Rollen-Auflösung und Empfänger-Zustellung werden übersprungen, auch der Last-Resort `persistent_notification` greift nicht. Der Eintrag landet aber normal in der History, im Logbook und feuert das `herold_sent`-Event mit `ausliefer_status: {"log_only": "skipped"}`. Du kannst `log_only` auch später via UI (Admin-Card → Topic editieren) oder Service (`topic_registrieren` mit `log_only: true`) umschalten.
+
 ## Schritt 3: Meldungen senden
 
 Wenn ein Ereignis eintritt, das eine Benachrichtigung auslösen soll:
@@ -214,6 +231,54 @@ if "herold" in hass.data:
         "message": f"PH bei {ph:.1f}", "severity": "warnung",
     }, blocking=True)
 ```
+
+## Events abonnieren (optional)
+
+Falls deine CC auf Zustellungs-Ergebnisse oder Config-Änderungen reagieren soll — Herold feuert vier Events auf dem HA-Event-Bus:
+
+| Event | Payload (Auszug) | Wann |
+|---|---|---|
+| `herold_sent` | `topic`, `severity`, `aufgeloste_rollen`, `aufgeloste_empfaenger`, `ausliefer_status`, `fallback_verwendet`, `eintrag_id`, `zeitstempel` | Nach jedem `senden()` |
+| `herold_delivery_failed` | `topic`, `empfaenger`, `fehler` | Einzelner Empfänger-Fehler (zusätzlich zu `herold_sent`) |
+| `herold_topic_registered` | `topic`, `status` (`neu` / `update` / `implizit` / `entfernt`) | Topic angelegt/aktualisiert/entfernt |
+| `herold_history_cleaned` | `ausloeser` (`scheduler` / `service`), `entfernt`, `restliche`, `max_eintraege`, `max_tage` | Täglicher Retention-Cleanup |
+| `herold_config_updated` | `typ` | Rollen/Empfänger/Mapping/Einstellungen geändert |
+
+**Beispiel:** Wenn deine CC auf fehlgeschlagene Zustellungen reagieren will (z.B. alternativen Kanal versuchen):
+
+```python
+from homeassistant.core import Event, callback
+
+@callback
+def _on_delivery_failed(event: Event) -> None:
+    if event.data["topic"].startswith("pool/"):
+        _LOGGER.warning(
+            "Pool-Zustellung fehlgeschlagen: %s → %s: %s",
+            event.data["empfaenger"],
+            event.data["topic"],
+            event.data["fehler"],
+        )
+
+entry.async_on_unload(
+    hass.bus.async_listen("herold_delivery_failed", _on_delivery_failed)
+)
+```
+
+## Retention & History-Abfrage
+
+Herold räumt die History täglich um 03:00 automatisch auf (Default: 2000 Einträge / 30 Tage, beides konfigurierbar). Deine CC kann History jederzeit abfragen:
+
+```python
+response = await hass.services.async_call(
+    "herold", "history_abfragen",
+    {"topic": "pool/*", "severity": "kritisch", "limit": 50},
+    blocking=True, return_response=True,
+)
+for eintrag in response["eintraege"]:
+    ...
+```
+
+Für sehr gesprächige Producer mit `log_only: true`: bedenke, dass jeder Eintrag Platz in der History belegt. Bei hohem Durchsatz (mehrere pro Minute) empfiehlt sich, die Retention-Grenzen zu reduzieren oder die Producer-Frequenz zu drosseln.
 
 ## Was Herold für dich übernimmt
 

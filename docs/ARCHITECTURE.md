@@ -1,6 +1,6 @@
 # Architektur
 
-**Status:** Design fixiert (2026-04-16). Alle MVP-Entscheidungen siehe [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md).
+**Status:** MVP live seit 2026-04-17, alle geplanten Features (Config-Flow, Admin-Card, Retention-Cleanup, `log_only`) implementiert. Grund-Design siehe [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md), Abweichungen/Erweiterungen sind unten in den betroffenen Abschnitten markiert.
 
 ## Kernmuster
 
@@ -23,6 +23,8 @@ Eine von einem Producer registrierte Meldungsart.
 | `quelle` | string | Name des Producers (z.B. `script.gute_nacht`, `custom_components.ekz_tariff`) |
 | `default_severity` | enum `info` / `warnung` / `kritisch` | Vorschlag, kann pro `senden()` überschrieben werden |
 | `default_rollen` | list\<Rolle\> | Wer bekommt's standardmässig (Vorschlag, admin kann überstimmen) |
+| `log_only` | bool | Wenn `true`: `senden()` schreibt nur History + Event, **keine** Zustellung (auch kein Last-Resort). Für gesprächige Producer. |
+| `explizit_registriert` | bool | `false` = implizit beim ersten `senden()` angelegt, `true` = via `topic_registrieren` |
 
 ### Rolle (funktionale Gruppe)
 Vom Admin definiert, unabhängig von Topics und Geräten.
@@ -86,28 +88,26 @@ Feinere Zuordnung als nur Topic→Default-Rollen. Im MVP nutzen wir ausschliessl
    → Ungültig? ServiceValidationError, nichts wird gesendet oder geloggt.
 
 3. Herold schlägt Topic im Registry nach.
-   → Unbekannt: Topic wird automatisch angelegt (implizit, siehe Q1), zur
-     "unzugeordnet"-Liste hinzugefügt, fallback_verwendet=true gesetzt.
-   → Bekannt ohne Rollen-Zuordnung: ebenfalls fallback_verwendet=true.
+   → Unbekannt: Topic wird automatisch angelegt (implizit, explizit_registriert=false).
+   → Bekannt ohne Rollen-Zuordnung: Fallback-Rolle greift (fallback_verwendet=true).
 
-4. Rollen-Menge bestimmen:
-   - MVP: topic.default_rollen + senden(..., extra_rollen=[...])
-     + (falls fallback_verwendet) Fallback-Rolle aus Config.
-   - v2: zusätzlich passende Regeln auswerten (severity/zeit/presence).
+4. **log_only-Short-Circuit:** Ist topic.log_only gesetzt,
+   überspringe Schritte 5+6 komplett. ausliefer_status = {"log_only": "skipped"},
+   aufgeloste_rollen = [], aufgeloste_empfaenger = []. Weiter bei Schritt 7.
 
-5. Rollen auflösen: Jede Rolle → ihre Mitglieder (Empfänger).
-   → Empfänger-Union bilden und deduplizieren.
-   → Leere Menge (Fallback-Rolle ist leer)? Last-Resort
-     persistent_notification.create.
+5. Rollen-Menge bestimmen:
+   - Admin-Mapping (topic_rolle_mapping) hat Vorrang vor topic.default_rollen.
+   - Plus senden(..., extra_rollen=[...]).
+   - Leer + keine Fallback-Rolle → Last-Resort persistent_notification (siehe 6).
 
-6. Pro Empfänger: severity_payload-Override des Empfängers mergen,
-   dann Ausspiel-Mechanismus aufrufen (MVP: notify.<ziel>).
+6. Rollen → Empfänger auflösen + Zustellung:
+   - Jede Rolle → ihre Mitglieder, Empfänger-Union deduplizieren.
+   - Keine Empfänger? Last-Resort persistent_notification.create (fallback_verwendet=true).
+   - Pro Empfänger: severity_payload-Override mergen, notify.<ziel> aufrufen.
 
 7. Nebenwirkungen (synchron im selben senden()-Call):
-   - Event herold_sent auf EventBus firen
-     (inkl. fallback_verwendet, aufgelöste_rollen, aufgelöste_empfänger,
-      pro-Empfänger ausliefer_status).
-   - Logbook-Eintrag.
+   - Event herold_sent auf EventBus firen.
+   - Logbook-Eintrag (via logbook.py async_describe_events).
    - Persistente History-Zeile (.storage/herold_history).
 ```
 
@@ -124,6 +124,7 @@ data:
   quelle: "automation.wasserleck_waschkuche"
   default_severity: "kritisch"
   default_rollen: ["techn_support", "erwachsener"]   # optional; default []
+  log_only: false                                    # optional; default false
 ```
 
 ### `herold.senden`
@@ -167,6 +168,41 @@ data:
   limit: 100                    # optional, default 100
 ```
 
+### `herold.topic_entfernen` / `rolle_entfernen` / `empfaenger_entfernen`
+Löschen der jeweiligen Entität. Bereinigen konsistent:
+- `topic_entfernen`: löscht auch `topic_rolle_mapping`-Eintrag
+- `rolle_entfernen`: entfernt Rolle aus allen `topic.default_rollen`, aus allen `topic_rolle_mapping`-Einträgen, setzt `fallback_rolle=None` wenn betroffen
+- `empfaenger_entfernen`: entfernt ID aus allen `rolle.mitglieder`
+
+### `herold.topic_rolle_mapping`
+Admin-Override für Topic → Rollen (schlägt Producer-Default).
+
+```yaml
+data:
+  topic: "pool/ph/niedrig"
+  rollen: ["techn_support"]         # optional; leer + zuruecksetzen=false löscht Override
+  zuruecksetzen: false               # optional; true entfernt Override explizit
+```
+
+### `herold.einstellungen_setzen`
+Fallback-Rolle und Retention-Grenzen zur Laufzeit anpassen.
+
+```yaml
+data:
+  fallback_rolle: "techn_support"    # optional; null = keine Fallback-Rolle
+  retention_eintraege: 2000           # optional
+  retention_tage: 30                  # optional
+```
+
+### `herold.history_aufraeumen`
+Manuelles Cleanup. Ohne Parameter = Config-Defaults.
+
+```yaml
+data:
+  max_eintraege: 1000   # optional; überschreibt Config
+  max_tage: 14          # optional; überschreibt Config
+```
+
 ### `herold.quittieren` — **v3, nicht im MVP**
 Wenn Lifecycle später dazukommt oder via Alert2-Bridge.
 
@@ -178,19 +214,33 @@ Wenn Lifecycle später dazukommt oder via Alert2-Bridge.
 
 ## Entities
 
-- `sensor.herold_aktive_topics` — count registrierter Topics
-- `sensor.herold_letzte_meldung` — state: topic, attribute: vollständiger letzter Eintrag
-- `sensor.herold_unzugeordnete_topics` — count Topics ohne Rollen-Mapping, attribute: Liste der Topic-IDs
-- `sensor.herold_meldungen_heute` — Zähler (Mitternacht bis jetzt)
-- `sensor.herold_meldungen_7_tage` — Zähler (rollierende 7 Tage)
+| Sensor | State | Attribute | Quell-Event |
+|---|---|---|---|
+| `sensor.herold_letzte_meldung` | Topic-ID | voller letzter Eintrag | `herold_sent` |
+| `sensor.herold_meldungen_heute` | Zähler (Mitternacht UTC) | — | `herold_sent` |
+| `sensor.herold_meldungen_7_tage` | Zähler (rollierend) | — | `herold_sent` |
+| `sensor.herold_aktive_topics` | Anzahl | `topics[]` mit id/name/severity/`log_only`/explizit | `herold_topic_registered`, `herold_sent` |
+| `sensor.herold_unzugeordnete_topics` | Anzahl | `topics[]`, **ohne log_only-Topics** | `herold_topic_registered`, `herold_sent` |
+| `sensor.herold_rollen` | Anzahl | `rollen[]` mit mitglieder + ist_fallback | `herold_config_updated` |
+| `sensor.herold_empfanger` *)| Anzahl | `empfaenger[]` + welche Rollen | `herold_config_updated` |
+| `sensor.herold_topic_mapping` | Anzahl Overrides | `mapping[]` mit producer_default/override/wirksam | `herold_config_updated` |
+| `sensor.herold_einstellungen` | Fallback-Rolle-ID | `fallback_rolle`, `retention_eintraege`, `retention_tage` | `herold_config_updated` |
 
-Keine Attribut-Listen der "letzten N Einträge" auf einem Sensor — HA-Attribute-Limit (~16 kB) kollidiert mit langen Messages. Für Listen → `herold.history_abfragen`.
+*) Entity-ID ohne `ä` — HA's Slugify macht `Empfänger` → `empfanger`.
+
+Keine Attribut-Listen der "letzten N Einträge" auf einem Sensor — HA-Attribute-Limit (~16 kB) kollidiert mit langen Messages. Für Listen → `herold.history_abfragen` oder Log-Card.
 
 ## Events (auf HA Event Bus)
 
-- `herold_topic_registered` (topic, neu|update)
-- `herold_sent` (topic, severity, aufgelöste_rollen, aufgelöste_empfänger, ausliefer_status, fallback_verwendet, eintrag_id, zeitstempel)
-- `herold_delivery_failed` (topic, empfänger, fehler) — zusätzlich zum `herold_sent`, für einfacheres Filtern im Event-Trigger
+| Event | Payload | Ausgelöst durch |
+|---|---|---|
+| `herold_sent` | topic, severity, aufgeloste_rollen, aufgeloste_empfaenger, ausliefer_status, fallback_verwendet, eintrag_id, zeitstempel | jeder `senden()`-Call |
+| `herold_delivery_failed` | topic, empfaenger, fehler | Einzel-Empfänger-Fehler (zusätzlich zu `herold_sent`) |
+| `herold_topic_registered` | topic, status (`neu` / `update` / `implizit` / `entfernt`) | `topic_registrieren`, `topic_entfernen`, implizite Anlage |
+| `herold_history_cleaned` | ausloeser (`scheduler`/`service`), entfernt, restliche, max_eintraege, max_tage | Tägliches Cleanup + `history_aufraeumen` |
+| `herold_config_updated` | typ (`config`/`options_flow`) | Jede Config-Änderung (Rollen/Empfänger/Mapping/Einstellungen) |
+
+Alle Events sind im Logbook formatiert (siehe `logbook.py`).
 
 ## Zentrales Log / History
 
@@ -220,18 +270,21 @@ Keine Attribut-Listen der "letzten N Einträge" auf einem Sensor — HA-Attribut
 
 ### Retention
 
-Konfigurierbar im Config Flow, **Defaults:**
+Konfigurierbar im Config Flow (Einstellungen-Tab) oder via `herold.einstellungen_setzen`, **Defaults:**
 - Max. Einträge: **2000**
 - Max. Alter: **30 Tage**
-- Es greift, was zuerst zutrifft (FIFO bei Einträgen, Zeit-Cleanup täglich).
-- Auto-Cleanup einmal täglich um 03:00 via `async_track_time_change`.
+- Es greift, was zuerst zutrifft (FIFO bei Einträgen, Zeit-Cleanup).
+- Auto-Cleanup einmal täglich um **03:00** via `async_track_time_change`.
+- Manueller Trigger: `herold.history_aufraeumen` (optional mit Override).
+- Feuert `herold_history_cleaned`-Event mit Zähler-Details.
 
 ### Zugriff
 
 - **Service** `herold.history_abfragen` → Liste (siehe Services-Abschnitt oben).
 - **Entities** für Dashboard-Ansicht (letzte, heute, 7d).
-- **Developer Tools**: Events können live beobachtet werden.
-- **v2+:** eigene Lovelace-Card mit Timeline-Ansicht.
+- **Custom Cards:** `herold-log-card` (Filter/Suche) und `herold-admin-card` (Verwaltung).
+- **Logbook:** alle Herold-Events sind über `logbook.py` sauber formatiert.
+- **Developer Tools → Events:** live mitlesen.
 
 ### Privacy / Datensparsamkeit
 
@@ -240,15 +293,29 @@ Konfigurierbar im Config Flow, **Defaults:**
 
 ## Konfiguration
 
-**Primär:** Config Flow (UI). Tabs im MVP:
-1. **Empfänger** — Auflistung, neu anlegen, `severity_payload` pflegen
-2. **Rollen** — anlegen, Mitglieder (Empfänger) verwalten
-3. **Topics** — alle registrierten Topics (explizit + implizit), Default-Rollen zuweisen, Baum-Darstellung nach Slash-Hierarchie
-4. **Einstellungen** — Fallback-Rolle, Retention (max. Einträge, max. Alter)
+**Zwei parallele Wege — beide voll funktional:**
 
-**v2:** zusätzlicher Tab **Regeln** (Severity/Zeit/Presence-Overrides).
+### Config-Flow / Options-Flow (Settings → Geräte & Dienste → Herold → Konfigurieren)
 
-**Optional:** YAML-Import, für Power-User / Versionskontrolle.
+5-Punkt-Menu:
+1. **Topics** — Liste mit `log_only`-Flag, Anlegen/Bearbeiten/Löschen
+2. **Rollen** — Liste mit Fallback-Badge, Mitglieder-Multi-Select
+3. **Empfänger** — Typ/Ziel/Name
+4. **Topic-Rollen-Zuordnung** (Admin-Override) — pro Topic die wirksamen Rollen überschreiben
+5. **Einstellungen** — Fallback-Rolle, Retention
+
+### Admin-Custom-Card (`herold-admin-card`, Lovelace)
+
+Tab-basiertes Panel mit denselben 5 Bereichen in einer Übersicht:
+- Tabellen-Ansicht aller Entitäten mit Quick-Actions
+- Inline-Edit-Dialog (bleibt offen während State-Updates)
+- Warn-Banner oben (Topics ohne Rollen, Rollen ohne Mitglieder, Empfänger ohne Rolle)
+- Live-Refresh via `herold_config_updated`-Event
+- Ruft direkt die herold.*-Services per WebSocket — keine Options-Flow-Dialoge
+
+**v2:** zusätzlicher Bereich **Regeln** (Severity/Zeit/Presence-Overrides).
+
+**Scripting-Parität:** Alle UI-Aktionen sind auch als Service verfügbar (`topic_registrieren`, `topic_entfernen`, `rolle_setzen`, `rolle_entfernen`, `empfaenger_setzen`, `empfaenger_entfernen`, `topic_rolle_mapping`, `einstellungen_setzen`).
 
 ## Getroffene Design-Entscheidungen
 
