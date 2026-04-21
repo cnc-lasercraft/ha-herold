@@ -35,6 +35,8 @@ def async_describe_events(
         empf = d.get("aufgeloste_empfaenger") or []
         status = d.get("ausliefer_status") or {}
         fallback = d.get("fallback_verwendet", False)
+        il = d.get("interruption_level")
+        il_quelle = d.get("interruption_level_quelle")
 
         if status.get("log_only") == "skipped":
             msg = f"[{severity}] {topic} → nur Log (log_only)"
@@ -49,6 +51,9 @@ def async_describe_events(
                 msg += f", {err} Fehler"
             if fallback:
                 msg += " (Fallback-Rolle)"
+
+        if il:
+            msg += f" · 🔔 {il}" + (f" ({il_quelle})" if il_quelle else "")
 
         return {LOGBOOK_ENTRY_NAME: _NAME, LOGBOOK_ENTRY_MESSAGE: msg}
 

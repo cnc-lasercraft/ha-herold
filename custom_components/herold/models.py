@@ -112,6 +112,8 @@ class HistoryEintrag:
     payload: dict[str, Any] = field(default_factory=dict)
     fallback_verwendet: bool = False
     quelle_context: dict[str, Any] = field(default_factory=dict)
+    interruption_level: str | None = None  # effektiv von Herold gesetzt (Topic/Call)
+    interruption_level_quelle: str | None = None  # "call" | "topic" | None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -128,6 +130,8 @@ class HistoryEintrag:
             "payload": dict(self.payload),
             "fallback_verwendet": self.fallback_verwendet,
             "quelle_context": dict(self.quelle_context),
+            "interruption_level": self.interruption_level,
+            "interruption_level_quelle": self.interruption_level_quelle,
         }
 
     @classmethod
@@ -146,4 +150,6 @@ class HistoryEintrag:
             payload=dict(data.get("payload", {})),
             fallback_verwendet=data.get("fallback_verwendet", False),
             quelle_context=dict(data.get("quelle_context", {})),
+            interruption_level=data.get("interruption_level"),
+            interruption_level_quelle=data.get("interruption_level_quelle"),
         )

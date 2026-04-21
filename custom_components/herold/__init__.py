@@ -585,6 +585,18 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         eintrag_id = uuid.uuid4().hex
         zeitstempel = datetime.now(tz=timezone.utc).isoformat()
 
+        # Effektiven interruption_level ermitteln (nur was Herold explizit setzt,
+        # Empfänger-severity_payload-Default wird nicht berücksichtigt)
+        if call_interruption_level:
+            effektiver_il: str | None = call_interruption_level
+            il_quelle: str | None = "call"
+        elif topic.interruption_level:
+            effektiver_il = topic.interruption_level
+            il_quelle = "topic"
+        else:
+            effektiver_il = None
+            il_quelle = None
+
         eintrag = HistoryEintrag(
             id=eintrag_id,
             zeitstempel=zeitstempel,
@@ -603,6 +615,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 "parent_id": call.context.parent_id,
                 "id": call.context.id,
             },
+            interruption_level=effektiver_il,
+            interruption_level_quelle=il_quelle,
         )
         await history_store.async_add(eintrag)
 
@@ -617,6 +631,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 "aufgeloste_empfaenger": empfaenger_ids,
                 "ausliefer_status": ausliefer_status,
                 "fallback_verwendet": fallback_verwendet,
+                "interruption_level": effektiver_il,
+                "interruption_level_quelle": il_quelle,
                 "zeitstempel": zeitstempel,
             },
         )

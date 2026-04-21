@@ -115,6 +115,8 @@ class HeroldLetzteMeldungSensor(HeroldBaseSensor):
             "aufgeloste_empfaenger": e.aufgeloste_empfaenger,
             "ausliefer_status": e.ausliefer_status,
             "fallback_verwendet": e.fallback_verwendet,
+            "interruption_level": e.interruption_level,
+            "interruption_level_quelle": e.interruption_level_quelle,
         }
 
 
