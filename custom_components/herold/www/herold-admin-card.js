@@ -438,25 +438,25 @@ class HeroldAdminCard extends HTMLElement {
         form = `
           ${
             e.isNeu
-              ? `<label>Topic-ID <span class="hint">(Kleinbuchstaben, Ziffern, _ und /)</span>
+              ? `<label><span class="lbl-text">Topic-ID</span> <span class="hint">(Kleinbuchstaben, Ziffern, _ und /)</span>
               <input id="f-id" type="text" value="${d.id || ""}" required>
             </label>`
               : `<div class="readonly"><span class="lbl">ID</span> <span class="mono">${d.id}</span></div>`
           }
-          <label>Name <input id="f-name" type="text" value="${d.name || ""}"></label>
-          <label>Beschreibung <textarea id="f-beschreibung">${d.beschreibung || ""}</textarea></label>
-          <label>Quelle <input id="f-quelle" type="text" value="${d.quelle || ""}" placeholder="z.B. custom_components.pool"></label>
-          <label>Default-Severity
+          <label><span class="lbl-text">Name</span><input id="f-name" type="text" value="${d.name || ""}"></label>
+          <label><span class="lbl-text">Beschreibung</span><textarea id="f-beschreibung">${d.beschreibung || ""}</textarea></label>
+          <label><span class="lbl-text">Quelle</span><input id="f-quelle" type="text" value="${d.quelle || ""}" placeholder="z.B. custom_components.pool"></label>
+          <label><span class="lbl-text">Default-Severity</span>
             <select id="f-severity">
               ${SEVERITIES.map((s) => `<option ${d.default_severity === s ? "selected" : ""}>${s}</option>`).join("")}
             </select>
           </label>
-          <label>Default-Rollen <span class="hint">(Ctrl/Cmd+Klick für mehrere)</span>
+          <label><span class="lbl-text">Default-Rollen</span> <span class="hint">(Ctrl/Cmd+Klick für mehrere)</span>
             <select id="f-rollen" multiple size="4">${rollenOpts}</select>
           </label>
           <label class="checkbox">
             <input id="f-log-only" type="checkbox" ${d.log_only ? "checked" : ""}>
-            Nur Log (keine Zustellung — weder Push noch Last-Resort)
+            <span>Nur Log (keine Zustellung — weder Push noch Last-Resort)</span>
           </label>
         `;
         break;
@@ -473,11 +473,11 @@ class HeroldAdminCard extends HTMLElement {
         form = `
           ${
             e.isNeu
-              ? `<label>Rollen-ID <input id="f-id" type="text" value="${d.id || ""}" required></label>`
+              ? `<label><span class="lbl-text">Rollen-ID</span> <span class="hint">(kleingeschrieben, z.B. <code>erwachsener</code>)</span><input id="f-id" type="text" value="${d.id || ""}" required></label>`
               : `<div class="readonly"><span class="lbl">ID</span> <span class="mono">${d.id}</span>${d.ist_fallback ? ' <span class="badge">Fallback</span>' : ""}</div>`
           }
-          <label>Name <input id="f-name" type="text" value="${d.name || ""}"></label>
-          <label>Mitglieder (Empfänger) <span class="hint">(Ctrl/Cmd+Klick)</span>
+          <label><span class="lbl-text">Name</span><input id="f-name" type="text" value="${d.name || ""}"></label>
+          <label><span class="lbl-text">Mitglieder (Empfänger)</span> <span class="hint">(Ctrl/Cmd+Klick)</span>
             <select id="f-mitglieder" multiple size="6">${empfOpts}</select>
           </label>
         `;
@@ -489,18 +489,18 @@ class HeroldAdminCard extends HTMLElement {
         form = `
           ${
             e.isNeu
-              ? `<label>Empfänger-ID <input id="f-id" type="text" value="${d.id || ""}" required></label>`
+              ? `<label><span class="lbl-text">Empfänger-ID</span><input id="f-id" type="text" value="${d.id || ""}" required></label>`
               : `<div class="readonly"><span class="lbl">ID</span> <span class="mono">${d.id}</span></div>`
           }
-          <label>Typ
+          <label><span class="lbl-text">Typ</span>
             <select id="f-typ">
               <option value="notify_service" ${d.typ === "notify_service" ? "selected" : ""}>notify_service</option>
             </select>
           </label>
-          <label>Ziel <span class="hint">(domain.service, z.B. notify.mobile_app_iphone_17_ul)</span>
+          <label><span class="lbl-text">Ziel</span> <span class="hint">(domain.service, z.B. notify.mobile_app_iphone_17_ul)</span>
             <input id="f-ziel" type="text" value="${d.ziel || ""}" required>
           </label>
-          <label>Name <input id="f-name" type="text" value="${d.name || ""}"></label>
+          <label><span class="lbl-text">Name</span><input id="f-name" type="text" value="${d.name || ""}"></label>
         `;
         break;
       }
@@ -524,7 +524,7 @@ class HeroldAdminCard extends HTMLElement {
           <div class="readonly">
             <span class="lbl">Producer-Default</span> ${producerDefault}
           </div>
-          <label>Admin-Override <span class="hint">(leere Auswahl = kein Override, Producer-Default greift)</span>
+          <label><span class="lbl-text">Admin-Override</span> <span class="hint">(leere Auswahl = kein Override, Producer-Default greift)</span>
             <select id="f-override" multiple size="6">${rollenOpts}</select>
           </label>
         `;
@@ -933,6 +933,8 @@ class HeroldAdminCard extends HTMLElement {
       .dialog-head .close:hover { background: var(--secondary-background-color, #f5f5f5); }
       .dialog-body { padding: 16px 20px; display: grid; gap: 14px; }
       .dialog-body label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--secondary-text-color); }
+      .dialog-body label .lbl-text { font-weight: 500; color: var(--primary-text-color); font-size: 13px; }
+      .dialog-body label code { background: var(--secondary-background-color, #2a2a2a); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
       .dialog-body label.checkbox { flex-direction: row; align-items: center; gap: 8px; color: var(--primary-text-color); font-size: 14px; }
       .dialog-body input, .dialog-body select, .dialog-body textarea {
         padding: 8px 10px; border: 1px solid var(--divider-color, #ddd); border-radius: 6px;
