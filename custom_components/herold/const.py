@@ -18,6 +18,11 @@ SEVERITY_KRITISCH: Final = "kritisch"
 SEVERITIES: Final = (SEVERITY_INFO, SEVERITY_WARNUNG, SEVERITY_KRITISCH)
 SEVERITY_DEFAULT: Final = SEVERITY_INFO
 
+# iOS Interruption Levels (Apple Push). `active` ist der iOS-Default —
+# wird wie "kein Override" behandelt. `critical` braucht die Critical-
+# Alerts-Permission in der HA Companion App.
+INTERRUPTION_LEVELS: Final = ("passive", "active", "time-sensitive", "critical")
+
 EMPF_TYP_NOTIFY: Final = "notify_service"
 EMPF_TYPEN: Final = (EMPF_TYP_NOTIFY,)
 

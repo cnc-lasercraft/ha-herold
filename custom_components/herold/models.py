@@ -17,6 +17,7 @@ class Topic:
     default_rollen: list[str] = field(default_factory=list)
     explizit_registriert: bool = False
     log_only: bool = False
+    interruption_level: str | None = None  # None = kein Topic-Override
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -28,6 +29,7 @@ class Topic:
             "default_rollen": list(self.default_rollen),
             "explizit_registriert": self.explizit_registriert,
             "log_only": self.log_only,
+            "interruption_level": self.interruption_level,
         }
 
     @classmethod
@@ -41,6 +43,7 @@ class Topic:
             default_rollen=list(data.get("default_rollen", [])),
             explizit_registriert=data.get("explizit_registriert", False),
             log_only=data.get("log_only", False),
+            interruption_level=data.get("interruption_level"),
         )
 
 

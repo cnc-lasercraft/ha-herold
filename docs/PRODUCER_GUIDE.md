@@ -201,6 +201,45 @@ backup/fehler
 pv/ueberschuss
 ```
 
+## iOS Interruption-Level (Urgent / Critical / …)
+
+Unabhängig von Severity kannst du das iOS-Interruption-Level steuern — pro Topic (Default) oder pro Meldung (Override).
+
+**Merge-Reihenfolge** (spätere gewinnen):
+1. Empfänger `severity_payload[severity]` — schwächste Priorität
+2. `Topic.interruption_level` — Topic-Default (gesetzt via `topic_registrieren` oder Admin-Card)
+3. `senden(..., payload=...)` — allgemeiner Passthrough
+4. `senden(..., interruption_level=...)` — höchste Priorität
+
+**Topic-Default setzen:**
+
+```yaml
+# In Topic-Registrierung oder über die Admin-Card (Topic-Edit → Dropdown)
+service: herold.topic_registrieren
+data:
+  topic: "wasser/leck/waschkueche"
+  interruption_level: "time-sensitive"   # passive / active / time-sensitive / critical
+```
+
+**Pro Meldung überschreiben:**
+
+```yaml
+service: herold.senden
+data:
+  topic: "garage/tor/offen_nachts"
+  titel: "Garagentor nachts offen!"
+  message: "..."
+  interruption_level: "critical"   # durchbricht Silent/DND, braucht Critical-Permission
+```
+
+**iOS-Bedeutung:**
+| Level | Effekt |
+|---|---|
+| `passive` | Nur Lock-Screen, kein Ton/Vibrieren |
+| `active` (iOS-Default) | Standard-Push |
+| `time-sensitive` | Durchbricht Focus-Modes, bleibt 1h prominent |
+| `critical` | Durchbricht Silent/DND, spielt auch bei Stumm einen Ton — **Critical-Alerts-Permission** in HA Companion App erforderlich |
+
 ## Severity-Semantik
 
 | Severity | Bedeutung | Typischer Empfänger-Effekt |

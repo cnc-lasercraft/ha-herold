@@ -53,6 +53,19 @@ senden:
       default: {}
       selector:
         object:
+    interruption_level:
+      name: iOS Interruption-Level
+      description: >
+        Überschreibt Topic-Default und Empfänger-severity_payload (höchste Priorität).
+        'time-sensitive' durchbricht Focus-Modes, 'critical' auch Silent/DND
+        (benötigt Critical-Alerts-Permission in der HA Companion App).
+      selector:
+        select:
+          options:
+            - passive
+            - active
+            - time-sensitive
+            - critical
 
 topic_registrieren:
   name: Topic registrieren
@@ -106,6 +119,18 @@ topic_registrieren:
       default: false
       selector:
         boolean:
+    interruption_level:
+      name: iOS Interruption-Level (Topic-Default)
+      description: >
+        Default-Interruption-Level für dieses Topic. Kann per senden()-Call
+        überschrieben werden. Leer = Empfänger-severity_payload gewinnt.
+      selector:
+        select:
+          options:
+            - passive
+            - active
+            - time-sensitive
+            - critical
 
 topic_entfernen:
   name: Topic entfernen

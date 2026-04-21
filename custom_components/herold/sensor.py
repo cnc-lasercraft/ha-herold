@@ -192,6 +192,7 @@ class HeroldAktiveTopicsSensor(HeroldBaseSensor):
                     "severity": t.default_severity,
                     "explizit": t.explizit_registriert,
                     "log_only": t.log_only,
+                    "interruption_level": t.interruption_level,
                 }
                 for t in self._store.topics.values()
             ]

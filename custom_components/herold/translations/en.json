@@ -42,6 +42,7 @@
           "default_severity": "Default severity",
           "default_rollen": "Default roles",
           "log_only": "Log only (no delivery)",
+          "interruption_level": "iOS interruption level (topic default)",
           "_loeschen": "⚠️ Delete this topic (incl. role mapping)"
         }
       },

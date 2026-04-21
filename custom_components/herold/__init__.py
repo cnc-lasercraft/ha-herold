@@ -30,6 +30,7 @@ from .const import (
     EVENT_HISTORY_CLEANED,
     EVENT_SENT,
     EVENT_TOPIC_REGISTERED,
+    INTERRUPTION_LEVELS,
     SERVICE_EINSTELLUNGEN_SETZEN,
     SERVICE_EMPFAENGER_ENTFERNEN,
     SERVICE_EMPFAENGER_SETZEN,
@@ -90,6 +91,7 @@ SENDEN_SCHEMA = vol.Schema(
         vol.Optional("actions"): vol.All(cv.ensure_list, [dict]),
         vol.Optional("extra_rollen"): vol.All(cv.ensure_list, [cv.string]),
         vol.Optional("payload"): dict,
+        vol.Optional("interruption_level"): vol.In(INTERRUPTION_LEVELS),
     }
 )
 
@@ -102,6 +104,7 @@ TOPIC_REGISTRIEREN_SCHEMA = vol.Schema(
         vol.Optional("default_severity"): vol.In(SEVERITIES),
         vol.Optional("default_rollen"): vol.All(cv.ensure_list, [cv.string]),
         vol.Optional("log_only"): cv.boolean,
+        vol.Optional("interruption_level"): vol.Any(None, vol.In(INTERRUPTION_LEVELS)),
     }
 )
 
@@ -222,6 +225,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 existing.default_rollen = list(call.data["default_rollen"])
             if "log_only" in call.data:
                 existing.log_only = bool(call.data["log_only"])
+            if "interruption_level" in call.data:
+                existing.interruption_level = call.data["interruption_level"] or None
             existing.explizit_registriert = True
             status = "update"
             _LOGGER.info("Topic '%s' aktualisiert", topic_id)
@@ -235,6 +240,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 default_rollen=list(call.data.get("default_rollen", [])),
                 explizit_registriert=True,
                 log_only=bool(call.data.get("log_only", False)),
+                interruption_level=call.data.get("interruption_level") or None,
             )
             status = "neu"
             _LOGGER.info(
@@ -422,6 +428,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         actions: list[dict] = call.data.get("actions", [])
         extra_rollen: list[str] = call.data.get("extra_rollen", [])
         payload: dict[str, Any] = call.data.get("payload", {})
+        call_interruption_level: str | None = call.data.get("interruption_level")
         fallback_verwendet = False
 
         # -- 1. Topic nachschlagen / implizit anlegen --
@@ -522,7 +529,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                         ausliefer_status[empf_id] = f"skipped:typ_{empf.typ}_nicht_unterstuetzt"
                         continue
 
-                    # Basis-Payload für notify.*
+                    # Payload-Merge-Reihenfolge (spätere gewinnen):
+                    # 1. Basis (title, message, actions)
+                    # 2. Empfänger severity_payload[severity] — Default pro Severity
+                    # 3. Topic.interruption_level → data.push.interruption-level (Topic-Default)
+                    # 4. senden()-payload — expliziter Passthrough vom Producer
+                    # 5. senden()-interruption_level — höchste Priorität, überschreibt alles
                     notify_data: dict[str, Any] = {
                         "title": titel,
                         "message": message or titel,
@@ -531,12 +543,22 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     if actions:
                         notify_data.setdefault("data", {})["actions"] = actions
 
-                    if payload:
-                        notify_data = _deep_merge(notify_data, payload)
-
                     sev_override = empf.severity_payload.get(severity)
                     if sev_override:
                         notify_data = _deep_merge(notify_data, sev_override)
+
+                    if topic.interruption_level:
+                        notify_data.setdefault("data", {}).setdefault("push", {})[
+                            "interruption-level"
+                        ] = topic.interruption_level
+
+                    if payload:
+                        notify_data = _deep_merge(notify_data, payload)
+
+                    if call_interruption_level:
+                        notify_data.setdefault("data", {}).setdefault("push", {})[
+                            "interruption-level"
+                        ] = call_interruption_level
 
                     # notify.mobile_app_xxx → domain="notify", service="mobile_app_xxx"
                     parts = empf.ziel.split(".", 1)

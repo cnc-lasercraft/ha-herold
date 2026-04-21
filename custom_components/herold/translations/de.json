@@ -42,6 +42,7 @@
           "default_severity": "Default-Severity",
           "default_rollen": "Default-Rollen",
           "log_only": "Nur Log (keine Zustellung)",
+          "interruption_level": "iOS Interruption-Level (Topic-Default)",
           "_loeschen": "⚠️ Dieses Topic löschen (inkl. Rollen-Mapping)"
         }
       },

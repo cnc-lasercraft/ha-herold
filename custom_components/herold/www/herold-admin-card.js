@@ -25,6 +25,7 @@ const TABS = [
 ];
 
 const SEVERITIES = ["info", "warnung", "kritisch"];
+const INTERRUPTION_LEVELS = ["passive", "active", "time-sensitive", "critical"];
 
 class HeroldAdminCard extends HTMLElement {
   constructor() {
@@ -267,12 +268,16 @@ class HeroldAdminCard extends HTMLElement {
               )
               .join("")
           : `<span class="chip warn">— keine —</span>`;
+        const flags = [];
+        if (t.log_only) flags.push(`<span class="chip">🔇 log</span>`);
+        if (t.interruption_level)
+          flags.push(`<span class="chip override" title="iOS Interruption-Level">🔔 ${t.interruption_level}</span>`);
         return `
           <tr data-edit-topic="${t.id}">
             <td class="mono">${t.id}</td>
             <td>${t.name || "—"}</td>
             <td><span class="sev sev-${t.severity}">${t.severity}</span></td>
-            <td>${t.log_only ? "🔇 log" : ""}</td>
+            <td>${flags.join(" ") || ""}</td>
             <td>${rollenHtml}</td>
           </tr>`;
       })
@@ -283,7 +288,7 @@ class HeroldAdminCard extends HTMLElement {
       </div>
       <table class="list">
         <thead><tr>
-          <th>ID</th><th>Name</th><th>Severity</th><th>Mode</th><th>Wirksame Rollen</th>
+          <th>ID</th><th>Name</th><th>Severity</th><th>Flags</th><th>Wirksame Rollen</th>
         </tr></thead>
         <tbody>${rows || `<tr><td colspan="5" class="empty">Keine Topics</td></tr>`}</tbody>
       </table>
@@ -457,6 +462,14 @@ class HeroldAdminCard extends HTMLElement {
           <label class="checkbox">
             <input id="f-log-only" type="checkbox" ${d.log_only ? "checked" : ""}>
             <span>Nur Log (keine Zustellung — weder Push noch Last-Resort)</span>
+          </label>
+          <label><span class="lbl-text">iOS Interruption-Level</span> <span class="hint">(Topic-Default, pro senden() überschreibbar)</span>
+            <select id="f-interruption">
+              <option value="" ${!d.interruption_level ? "selected" : ""}>— kein Override (Empfänger-Default) —</option>
+              ${INTERRUPTION_LEVELS.map(
+                (lv) => `<option value="${lv}" ${d.interruption_level === lv ? "selected" : ""}>${lv}</option>`
+              ).join("")}
+            </select>
           </label>
         `;
         break;
@@ -638,6 +651,7 @@ class HeroldAdminCard extends HTMLElement {
         default_severity: "info",
         default_rollen: [],
         log_only: false,
+        interruption_level: null,
       };
     if (typ === "rolle") return { id: "", name: "", mitglieder: [] };
     if (typ === "empfaenger")
@@ -663,6 +677,7 @@ class HeroldAdminCard extends HTMLElement {
         default_severity: t.severity || "info",
         default_rollen: map?.producer_default || [],
         log_only: !!t.log_only,
+        interruption_level: t.interruption_level || null,
       },
     };
     this._render();
@@ -738,6 +753,7 @@ class HeroldAdminCard extends HTMLElement {
       if (!id) return this._flash("ID ist ein Pflichtfeld", true);
       if (e.isNeu && !/^[a-z0-9_/]+$/.test(id))
         return this._flash("Ungültige Topic-ID (a-z 0-9 _ /)", true);
+      const interruption = get("#f-interruption")?.value || "";
       res = await this._callService("topic_registrieren", {
         topic: id,
         name: get("#f-name")?.value || "",
@@ -746,6 +762,7 @@ class HeroldAdminCard extends HTMLElement {
         default_severity: get("#f-severity")?.value || "info",
         default_rollen: multi("#f-rollen"),
         log_only: !!get("#f-log-only")?.checked,
+        interruption_level: interruption || null,
       });
     } else if (e.typ === "rolle") {
       const id = e.isNeu ? get("#f-id")?.value.trim() : e.id;

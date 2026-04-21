@@ -24,6 +24,7 @@ Eine von einem Producer registrierte Meldungsart.
 | `default_severity` | enum `info` / `warnung` / `kritisch` | Vorschlag, kann pro `senden()` überschrieben werden |
 | `default_rollen` | list\<Rolle\> | Wer bekommt's standardmässig (Vorschlag, admin kann überstimmen) |
 | `log_only` | bool | Wenn `true`: `senden()` schreibt nur History + Event, **keine** Zustellung (auch kein Last-Resort). Für gesprächige Producer. |
+| `interruption_level` | enum? `passive` / `active` / `time-sensitive` / `critical` / None | Topic-Default für iOS-Interruption-Level. Überschreibt Empfänger-severity_payload, wird durch senden()-Parameter überschrieben. |
 | `explizit_registriert` | bool | `false` = implizit beim ersten `senden()` angelegt, `true` = via `topic_registrieren` |
 
 ### Rolle (funktionale Gruppe)
@@ -103,7 +104,13 @@ Feinere Zuordnung als nur Topic→Default-Rollen. Im MVP nutzen wir ausschliessl
 6. Rollen → Empfänger auflösen + Zustellung:
    - Jede Rolle → ihre Mitglieder, Empfänger-Union deduplizieren.
    - Keine Empfänger? Last-Resort persistent_notification.create (fallback_verwendet=true).
-   - Pro Empfänger: severity_payload-Override mergen, notify.<ziel> aufrufen.
+   - Pro Empfänger: Payload-Merge in dieser Reihenfolge (spätere gewinnen):
+       a) Basis (title, message, actions)
+       b) empf.severity_payload[severity]             — Default pro Severity
+       c) topic.interruption_level → data.push.*      — Topic-Default
+       d) senden()-payload                            — expliziter Passthrough
+       e) senden()-interruption_level → data.push.*   — höchste Priorität
+     notify.<ziel> aufrufen.
 
 7. Nebenwirkungen (synchron im selben senden()-Call):
    - Event herold_sent auf EventBus firen.

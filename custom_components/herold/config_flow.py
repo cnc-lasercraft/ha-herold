@@ -32,6 +32,7 @@ from .const import (
     DOMAIN,
     EMPF_TYP_NOTIFY,
     EMPF_TYPEN,
+    INTERRUPTION_LEVELS,
     SEVERITIES,
     SEVERITY_DEFAULT,
     TOPIC_REGEX,
@@ -193,6 +194,8 @@ class HeroldOptionsFlow(OptionsFlow):
                 )
                 topic.default_rollen = list(user_input.get("default_rollen", []))
                 topic.log_only = bool(user_input.get("log_only", False))
+                il = user_input.get("interruption_level") or None
+                topic.interruption_level = il if il != "__keiner__" else None
                 topic.explizit_registriert = True
                 await self._save()
                 return self.async_create_entry(title="", data={})
@@ -245,6 +248,24 @@ class HeroldOptionsFlow(OptionsFlow):
         schema_dict[
             vol.Optional("log_only", default=bool(_last("log_only", False)))
         ] = BooleanSelector()
+
+        il_aktuell = _last("interruption_level", topic.interruption_level if topic else None)
+        il_optionen: list[dict[str, str]] = [
+            {"value": "__keiner__", "label": "— kein Override (Empfänger-Default) —"}
+        ]
+        il_optionen.extend({"value": lv, "label": lv} for lv in INTERRUPTION_LEVELS)
+        schema_dict[
+            vol.Optional(
+                "interruption_level",
+                default=il_aktuell if il_aktuell else "__keiner__",
+            )
+        ] = SelectSelector(
+            SelectSelectorConfig(
+                options=il_optionen,
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        )
+
         if not is_new:
             schema_dict[vol.Optional("_loeschen", default=False)] = BooleanSelector()
 
