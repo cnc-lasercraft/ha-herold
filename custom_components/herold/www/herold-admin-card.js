@@ -373,21 +373,27 @@ class HeroldAdminCard extends HTMLElement {
         const over = m.override
           ? m.override.map((r) => `<span class="chip override">${r}</span>`).join("")
           : '<span class="dim">— kein Override —</span>';
-        const wirksam = (m.wirksam || [])
-          .map((r) => `<span class="chip">${r}</span>`)
-          .join("");
+        let wirksam;
+        if (m.wirksam && m.wirksam.length) {
+          wirksam = m.wirksam.map((r) => `<span class="chip">${r}</span>`).join("");
+        } else if (m.log_only) {
+          wirksam = `<span class="chip">🔇 log_only</span>`;
+        } else {
+          wirksam = `<span class="chip warn">⚠ keine Rollen</span>`;
+        }
         return `
-          <tr data-edit-mapping="${m.topic}">
+          <tr data-edit-mapping="${m.topic}" class="${m.log_only ? "dimmed" : ""}">
             <td class="mono">${m.topic}</td>
             <td>${prod || '<span class="dim">—</span>'}</td>
             <td>${over}</td>
-            <td>${wirksam || `<span class="chip warn">— keine —</span>`}</td>
+            <td>${wirksam}</td>
           </tr>`;
       })
       .join("");
     return `
       <div class="info">
         Override hat Vorrang vor Producer-Default. Klick auf eine Zeile zum Ändern.
+        <br>Log-only-Topics brauchen keine Rollen (werden nicht als Warnung gezählt).
       </div>
       <table class="list">
         <thead><tr>
@@ -925,6 +931,8 @@ class HeroldAdminCard extends HTMLElement {
       table.list td { padding: 8px; border-bottom: 1px solid var(--divider-color, #eee); vertical-align: top; }
       table.list tbody tr { cursor: pointer; transition: background 0.15s; }
       table.list tbody tr:hover { background: var(--secondary-background-color, #f5f5f5); }
+      table.list tbody tr.dimmed { opacity: 0.65; }
+      table.list tbody tr.dimmed:hover { opacity: 1; }
       table.list td.empty { text-align: center; color: var(--secondary-text-color, #999); padding: 24px; }
       table.list td.num { text-align: right; color: var(--secondary-text-color); }
 
