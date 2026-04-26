@@ -222,12 +222,13 @@ class HeroldUnzugeordneteTopicsSensor(HeroldBaseSensor):
         return {"topics": self._unzugeordnete()}
 
     def _unzugeordnete(self) -> list[str]:
+        # Effektive Werte berücksichtigen, damit User-Override (z.B. log_only=true)
+        # ein bisheriges "unzugeordnetes" Topic auch wirklich aus der Liste nimmt.
         return [
             tid
-            for tid, topic in self._store.topics.items()
-            if not topic.log_only
-            and not topic.default_rollen
-            and tid not in self._store.topic_rolle_mapping
+            for tid in self._store.topics
+            if not self._store.effective_log_only(tid)
+            and not self._store.effective_default_rollen(tid)[0]
         ]
 
 
@@ -319,22 +320,62 @@ class HeroldMappingSensor(HeroldBaseSensor):
 
     @property
     def native_value(self) -> int:
-        return len(self._store.topic_rolle_mapping)
+        # Anzahl Topics mit mindestens einem User-Override (Rollen oder Felder).
+        topic_ids = set(self._store.topic_rolle_mapping) | {
+            tid for tid, o in self._store.topic_overrides.items() if o
+        }
+        return len(topic_ids)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         eintraege = []
         for tid, topic in sorted(self._store.topics.items()):
-            override = self._store.topic_rolle_mapping.get(tid)
+            overrides = self._store.topic_overrides.get(tid, {})
+            rollen_override = self._store.topic_rolle_mapping.get(tid)
+
+            def _tripel(feld: str, producer_value: Any) -> dict[str, Any]:
+                if feld in overrides:
+                    return {
+                        "producer_default": producer_value,
+                        "override": overrides[feld],
+                        "wirksam": overrides[feld],
+                    }
+                return {
+                    "producer_default": producer_value,
+                    "override": None,
+                    "wirksam": producer_value,
+                }
+
+            rollen_tripel = (
+                {
+                    "producer_default": list(topic.default_rollen),
+                    "override": list(rollen_override),
+                    "wirksam": list(rollen_override),
+                }
+                if rollen_override is not None
+                else {
+                    "producer_default": list(topic.default_rollen),
+                    "override": None,
+                    "wirksam": list(topic.default_rollen),
+                }
+            )
+
             eintraege.append(
                 {
                     "topic": tid,
-                    "producer_default": list(topic.default_rollen),
-                    "override": list(override) if override is not None else None,
-                    "wirksam": list(override)
-                    if override is not None
-                    else list(topic.default_rollen),
-                    "log_only": topic.log_only,
+                    "rollen": rollen_tripel,
+                    "log_only": _tripel("log_only", bool(topic.log_only)),
+                    "interruption_level": _tripel(
+                        "interruption_level", topic.interruption_level
+                    ),
+                    "default_severity": _tripel(
+                        "default_severity", topic.default_severity
+                    ),
+                    # Convenience-Felder (für Cards die nur den effektiven Wert wollen)
+                    "wirksam_rollen": rollen_tripel["wirksam"],
+                    "wirksam_log_only": _tripel("log_only", bool(topic.log_only))[
+                        "wirksam"
+                    ],
                 }
             )
         return {"mapping": eintraege}

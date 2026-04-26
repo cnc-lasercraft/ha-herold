@@ -40,6 +40,7 @@ from .const import (
     SERVICE_ROLLE_SETZEN,
     SERVICE_SENDEN,
     SERVICE_TOPIC_ENTFERNEN,
+    SERVICE_TOPIC_OVERRIDE_SETZEN,
     SERVICE_TOPIC_REGISTRIEREN,
     SERVICE_TOPIC_ROLLE_MAPPING,
     SEVERITIES,
@@ -191,6 +192,19 @@ TOPIC_ROLLE_MAPPING_SCHEMA = vol.Schema(
     {
         vol.Required("topic"): _topic_id,
         vol.Optional("rollen"): vol.All(cv.ensure_list, [cv.string]),
+        vol.Optional("zuruecksetzen", default=False): cv.boolean,
+    }
+)
+
+# Sentinel: explizit "Feld zurücksetzen" (Override löschen, Producer-Default
+# wird wieder wirksam). vol.Any(None, ...) erlaubt das per JSON-`null`.
+TOPIC_OVERRIDE_SETZEN_SCHEMA = vol.Schema(
+    {
+        vol.Required("topic"): _topic_id,
+        vol.Optional("log_only"): vol.Any(None, cv.boolean),
+        vol.Optional("interruption_level"): vol.Any(None, vol.In(INTERRUPTION_LEVELS)),
+        vol.Optional("default_severity"): vol.Any(None, vol.In(SEVERITIES)),
+        vol.Optional("default_rollen"): vol.Any(None, vol.All(cv.ensure_list, [cv.string])),
         vol.Optional("zuruecksetzen", default=False): cv.boolean,
     }
 )
@@ -436,6 +450,60 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         await _save_and_notify()
 
     # -----------------------------------------------------------------------
+    # Service: topic_override_setzen  (User-Override für log_only,
+    # interruption_level, default_severity, default_rollen — pro Topic)
+    # -----------------------------------------------------------------------
+
+    async def _handle_topic_override_setzen(call: ServiceCall) -> None:
+        topic_id = call.data["topic"]
+        if call.data.get("zuruecksetzen"):
+            had_overrides = (
+                topic_id in config_store.topic_overrides
+                or topic_id in config_store.topic_rolle_mapping
+            )
+            config_store.topic_overrides.pop(topic_id, None)
+            config_store.topic_rolle_mapping.pop(topic_id, None)
+            if had_overrides:
+                _LOGGER.info(
+                    "Topic '%s' → alle User-Overrides entfernt (Producer-Defaults greifen)",
+                    topic_id,
+                )
+            await _save_and_notify()
+            return
+
+        overrides = config_store.topic_overrides.setdefault(topic_id, {})
+        geaendert: list[str] = []
+        for feld in ("log_only", "interruption_level", "default_severity"):
+            if feld not in call.data:
+                continue
+            wert = call.data[feld]
+            if wert is None:
+                if feld in overrides:
+                    overrides.pop(feld)
+                    geaendert.append(f"{feld}=reset")
+            else:
+                overrides[feld] = wert
+                geaendert.append(f"{feld}={wert}")
+
+        if "default_rollen" in call.data:
+            wert = call.data["default_rollen"]
+            if wert is None:
+                if topic_id in config_store.topic_rolle_mapping:
+                    config_store.topic_rolle_mapping.pop(topic_id)
+                    geaendert.append("default_rollen=reset")
+            else:
+                config_store.topic_rolle_mapping[topic_id] = list(wert)
+                geaendert.append(f"default_rollen={list(wert)}")
+
+        # Leere Override-Dicts aufräumen
+        if not overrides:
+            config_store.topic_overrides.pop(topic_id, None)
+
+        if geaendert:
+            _LOGGER.info("Topic '%s' Override aktualisiert: %s", topic_id, ", ".join(geaendert))
+        await _save_and_notify()
+
+    # -----------------------------------------------------------------------
     # Service: einstellungen_setzen  (Fallback-Rolle, Retention-Grenzen)
     # -----------------------------------------------------------------------
 
@@ -485,27 +553,25 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 EVENT_TOPIC_REGISTERED, {"topic": topic_id, "status": "implizit"}
             )
 
-        # -- 2. Severity: Call-Override > Topic-Default > Global-Default --
-        severity = call.data.get("severity") or topic.default_severity or SEVERITY_DEFAULT
+        # -- 2. Severity: Call-Override > effektiver Topic-Default > Global-Default --
+        eff_severity = config_store.effective_default_severity(topic_id)
+        severity = call.data.get("severity") or eff_severity or SEVERITY_DEFAULT
 
         # -- log_only Short-Circuit: nur History + Event, keine Zustellung --
         aufgeloste_rollen: list[str] = []
         empfaenger_ids: list[str] = []
         ausliefer_status: dict[str, str] = {}
 
-        if topic.log_only:
+        eff_log_only = config_store.effective_log_only(topic_id)
+        if eff_log_only:
             ausliefer_status["log_only"] = "skipped"
             _LOGGER.debug(
-                "Topic '%s' ist log_only — keine Zustellung, nur History/Event",
+                "Topic '%s' ist log_only (effektiv) — keine Zustellung, nur History/Event",
                 topic_id,
             )
         else:
             # -- 3. Rollen bestimmen --
-            # Admin-Mapping hat Vorrang vor Producer-Defaults
-            if topic_id in config_store.topic_rolle_mapping:
-                rollen_ids = list(config_store.topic_rolle_mapping[topic_id])
-            else:
-                rollen_ids = list(topic.default_rollen)
+            rollen_ids, _override_aktiv = config_store.effective_default_rollen(topic_id)
 
             for r in extra_rollen:
                 if r not in rollen_ids:
@@ -590,10 +656,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     if sev_override:
                         notify_data = _deep_merge(notify_data, sev_override)
 
-                    if topic.interruption_level:
+                    eff_il = config_store.effective_interruption_level(topic_id)
+                    if eff_il:
                         notify_data.setdefault("data", {}).setdefault("push", {})[
                             "interruption-level"
-                        ] = topic.interruption_level
+                        ] = eff_il
 
                     if payload:
                         notify_data = _deep_merge(notify_data, payload)
@@ -655,16 +722,19 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         zeitstempel = datetime.now(tz=timezone.utc).isoformat()
 
         # Effektiven interruption_level ermitteln (nur was Herold explizit setzt,
-        # Empfänger-severity_payload-Default wird nicht berücksichtigt)
+        # Empfänger-severity_payload-Default wird nicht berücksichtigt).
+        # Quelle "topic" deckt Producer-Default UND User-Override ab.
         if call_interruption_level:
             effektiver_il: str | None = call_interruption_level
             il_quelle: str | None = "call"
-        elif topic.interruption_level:
-            effektiver_il = topic.interruption_level
-            il_quelle = "topic"
         else:
-            effektiver_il = None
-            il_quelle = None
+            il_topic = config_store.effective_interruption_level(topic_id)
+            if il_topic:
+                effektiver_il = il_topic
+                il_quelle = "topic"
+            else:
+                effektiver_il = None
+                il_quelle = None
 
         eintrag = HistoryEintrag(
             id=eintrag_id,
@@ -850,6 +920,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         SERVICE_TOPIC_ROLLE_MAPPING,
         _handle_topic_rolle_mapping,
         schema=TOPIC_ROLLE_MAPPING_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_TOPIC_OVERRIDE_SETZEN,
+        _handle_topic_override_setzen,
+        schema=TOPIC_OVERRIDE_SETZEN_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,

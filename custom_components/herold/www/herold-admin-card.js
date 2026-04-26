@@ -367,22 +367,29 @@ class HeroldAdminCard extends HTMLElement {
     const mapping = this._mapping();
     const rows = mapping
       .map((m) => {
-        const prod = (m.producer_default || [])
+        // Sensor-Format: m.rollen = {producer_default, override, wirksam}
+        // m.log_only / m.interruption_level / m.default_severity analog.
+        const rTri = m.rollen || { producer_default: [], override: null, wirksam: [] };
+        const logEff = m.wirksam_log_only !== undefined
+          ? m.wirksam_log_only
+          : m.log_only?.wirksam ?? false;
+
+        const prod = (rTri.producer_default || [])
           .map((r) => `<span class="chip default">${r}</span>`)
           .join("");
-        const over = m.override
-          ? m.override.map((r) => `<span class="chip override">${r}</span>`).join("")
+        const over = rTri.override
+          ? rTri.override.map((r) => `<span class="chip override">${r}</span>`).join("")
           : '<span class="dim">— kein Override —</span>';
         let wirksam;
-        if (m.wirksam && m.wirksam.length) {
-          wirksam = m.wirksam.map((r) => `<span class="chip">${r}</span>`).join("");
-        } else if (m.log_only) {
+        if (rTri.wirksam && rTri.wirksam.length) {
+          wirksam = rTri.wirksam.map((r) => `<span class="chip">${r}</span>`).join("");
+        } else if (logEff) {
           wirksam = `<span class="chip">🔇 log_only</span>`;
         } else {
           wirksam = `<span class="chip warn">⚠ keine Rollen</span>`;
         }
         return `
-          <tr data-edit-mapping="${m.topic}" class="${m.log_only ? "dimmed" : ""}">
+          <tr data-edit-mapping="${m.topic}" class="${logEff ? "dimmed" : ""}">
             <td class="mono">${m.topic}</td>
             <td>${prod || '<span class="dim">—</span>'}</td>
             <td>${over}</td>
@@ -441,43 +448,110 @@ class HeroldAdminCard extends HTMLElement {
       case "topic": {
         titel = e.isNeu ? "Neues Topic anlegen" : `Topic: ${e.id}`;
         const d = e.daten;
-        const rollenOpts = this._rollen()
-          .map(
-            (r) => `<option value="${r.id}" ${(d.default_rollen || []).includes(r.id) ? "selected" : ""}>${r.id} — ${r.name || ""}</option>`
-          )
-          .join("");
-        form = `
-          ${
-            e.isNeu
-              ? `<label><span class="lbl-text">Topic-ID</span> <span class="hint">(Kleinbuchstaben, Ziffern, _ und /)</span>
+        if (e.isNeu) {
+          // Neuer Topic = User ist Producer. Werte gehen direkt als Producer-Defaults.
+          const rollenOpts = this._rollen()
+            .map(
+              (r) => `<option value="${r.id}" ${(d.default_rollen || []).includes(r.id) ? "selected" : ""}>${r.id} — ${r.name || ""}</option>`
+            )
+            .join("");
+          form = `
+            <label><span class="lbl-text">Topic-ID</span> <span class="hint">(Kleinbuchstaben, Ziffern, _ und /)</span>
               <input id="f-id" type="text" value="${d.id || ""}" required>
-            </label>`
-              : `<div class="readonly"><span class="lbl">ID</span> <span class="mono">${d.id}</span></div>`
-          }
-          <label><span class="lbl-text">Name</span><input id="f-name" type="text" value="${d.name || ""}"></label>
-          <label><span class="lbl-text">Beschreibung</span><textarea id="f-beschreibung">${d.beschreibung || ""}</textarea></label>
-          <label><span class="lbl-text">Quelle</span><input id="f-quelle" type="text" value="${d.quelle || ""}" placeholder="z.B. custom_components.pool"></label>
-          <label><span class="lbl-text">Default-Severity</span>
-            <select id="f-severity">
-              ${SEVERITIES.map((s) => `<option ${d.default_severity === s ? "selected" : ""}>${s}</option>`).join("")}
-            </select>
-          </label>
-          <label><span class="lbl-text">Default-Rollen</span> <span class="hint">(Ctrl/Cmd+Klick für mehrere)</span>
-            <select id="f-rollen" multiple size="4">${rollenOpts}</select>
-          </label>
-          <label class="checkbox">
-            <input id="f-log-only" type="checkbox" ${d.log_only ? "checked" : ""}>
-            <span>Nur Log (keine Zustellung — weder Push noch Last-Resort)</span>
-          </label>
-          <label><span class="lbl-text">iOS Interruption-Level</span> <span class="hint">(Topic-Default, pro senden() überschreibbar)</span>
-            <select id="f-interruption">
-              <option value="" ${!d.interruption_level ? "selected" : ""}>— kein Override (Empfänger-Default) —</option>
-              ${INTERRUPTION_LEVELS.map(
-                (lv) => `<option value="${lv}" ${d.interruption_level === lv ? "selected" : ""}>${lv}</option>`
-              ).join("")}
-            </select>
-          </label>
-        `;
+            </label>
+            <label><span class="lbl-text">Name</span><input id="f-name" type="text" value="${d.name || ""}"></label>
+            <label><span class="lbl-text">Beschreibung</span><textarea id="f-beschreibung">${d.beschreibung || ""}</textarea></label>
+            <label><span class="lbl-text">Quelle</span><input id="f-quelle" type="text" value="${d.quelle || ""}" placeholder="z.B. custom_components.pool"></label>
+            <label><span class="lbl-text">Default-Severity</span>
+              <select id="f-severity">
+                ${SEVERITIES.map((s) => `<option ${d.default_severity === s ? "selected" : ""}>${s}</option>`).join("")}
+              </select>
+            </label>
+            <label><span class="lbl-text">Default-Rollen</span> <span class="hint">(Ctrl/Cmd+Klick für mehrere)</span>
+              <select id="f-rollen" multiple size="4">${rollenOpts}</select>
+            </label>
+            <label class="checkbox">
+              <input id="f-log-only" type="checkbox" ${d.log_only ? "checked" : ""}>
+              <span>Nur Log (keine Zustellung — weder Push noch Last-Resort)</span>
+            </label>
+            <label><span class="lbl-text">iOS Interruption-Level</span>
+              <select id="f-interruption">
+                <option value="" ${!d.interruption_level ? "selected" : ""}>— kein Override (Empfänger-Default) —</option>
+                ${INTERRUPTION_LEVELS.map(
+                  (lv) => `<option value="${lv}" ${d.interruption_level === lv ? "selected" : ""}>${lv}</option>`
+                ).join("")}
+              </select>
+            </label>
+          `;
+        } else {
+          // Existierendes Topic: Producer-Felder (name/beschr/quelle) editierbar,
+          // andere als User-Override mit Producer-Default-Anzeige + Reset.
+          const sevTri = d.default_severity;
+          const rollenTri = d.rollen;
+          const logTri = d.log_only;
+          const ilTri = d.interruption_level;
+
+          const dim = (val) =>
+            val === null || val === undefined || val === ""
+              ? '<span class="dim">—</span>'
+              : `<span class="mono">${val}</span>`;
+          const dimList = (arr) =>
+            !arr || arr.length === 0
+              ? '<span class="dim">—</span>'
+              : arr.map((r) => `<span class="chip default">${r}</span>`).join(" ");
+
+          // Override-Wert für Vorbelegung der Inputs
+          const sevOv = sevTri.override;
+          const ilOv = ilTri.override;
+          const logOv = logTri.override; // null = kein Override, true/false = Override
+
+          const rollenOpts = this._rollen()
+            .map(
+              (r) =>
+                `<option value="${r.id}" ${(rollenTri.override || []).includes(r.id) ? "selected" : ""}>${r.id} — ${r.name || ""}</option>`
+            )
+            .join("");
+
+          form = `
+            <div class="readonly"><span class="lbl">ID</span> <span class="mono">${d.id}</span></div>
+            <label><span class="lbl-text">Name</span><input id="f-name" type="text" value="${d.name || ""}"></label>
+            <label><span class="lbl-text">Beschreibung</span><textarea id="f-beschreibung">${d.beschreibung || ""}</textarea></label>
+            <label><span class="lbl-text">Quelle</span><input id="f-quelle" type="text" value="${d.quelle || ""}" placeholder="z.B. custom_components.pool"></label>
+
+            <div class="section-head">User-Overrides <span class="hint">(leer = Producer-Default greift)</span></div>
+
+            <label><span class="lbl-text">Default-Severity</span> <span class="hint">Producer: ${dim(sevTri.producer_default)}</span>
+              <select id="f-sev-override">
+                <option value="" ${!sevOv ? "selected" : ""}>— kein Override —</option>
+                ${SEVERITIES.map((s) => `<option value="${s}" ${sevOv === s ? "selected" : ""}>${s}</option>`).join("")}
+              </select>
+            </label>
+
+            <label><span class="lbl-text">Default-Rollen</span> <span class="hint">Producer: ${dimList(rollenTri.producer_default)}</span>
+              <select id="f-rollen-override" multiple size="4">${rollenOpts}</select>
+              <span class="hint">leere Auswahl = kein Override (Producer-Default greift)</span>
+            </label>
+
+            <label><span class="lbl-text">log_only</span> <span class="hint">Producer: ${dim(String(logTri.producer_default))}</span>
+              <select id="f-log-override">
+                <option value="" ${logOv === null || logOv === undefined ? "selected" : ""}>— kein Override —</option>
+                <option value="true" ${logOv === true ? "selected" : ""}>true (nur Log)</option>
+                <option value="false" ${logOv === false ? "selected" : ""}>false (Push aktiv)</option>
+              </select>
+            </label>
+
+            <label><span class="lbl-text">iOS Interruption-Level</span> <span class="hint">Producer: ${dim(ilTri.producer_default)}</span>
+              <select id="f-il-override">
+                <option value="" ${!ilOv ? "selected" : ""}>— kein Override —</option>
+                ${INTERRUPTION_LEVELS.map(
+                  (lv) => `<option value="${lv}" ${ilOv === lv ? "selected" : ""}>${lv}</option>`
+                ).join("")}
+              </select>
+            </label>
+
+            <button class="secondary" data-reset-overrides>↺ Alle Overrides zurücksetzen</button>
+          `;
+        }
         break;
       }
       case "rolle": {
@@ -654,6 +728,22 @@ class HeroldAdminCard extends HTMLElement {
     if (saveBtn) saveBtn.addEventListener("click", () => this._saveCurrentEdit());
     const delBtn = sr.querySelector("[data-delete]");
     if (delBtn) delBtn.addEventListener("click", () => this._deleteCurrentEdit());
+    const resetOvBtn = sr.querySelector("[data-reset-overrides]");
+    if (resetOvBtn)
+      resetOvBtn.addEventListener("click", async () => {
+        if (!this._editing || this._editing.typ !== "topic" || this._editing.isNeu) return;
+        const r = await this._callService("topic_override_setzen", {
+          topic: this._editing.id,
+          zuruecksetzen: true,
+        });
+        if (r.ok) {
+          this._editing = null;
+          this._render();
+          this._flash("Alle Overrides zurückgesetzt");
+        } else {
+          this._flash(`Fehler: ${r.error || "unbekannt"}`, true);
+        }
+      });
     sr.querySelectorAll("[data-open-topic]").forEach((a) =>
       a.addEventListener("click", () => {
         const topicId = a.dataset.openTopic;
@@ -694,9 +784,13 @@ class HeroldAdminCard extends HTMLElement {
   _openTopicEdit(id) {
     const t = this._topics().find((x) => x.id === id);
     if (!t) return;
-    // Topic hat nicht alle Felder im Sensor — beschreibung/quelle/default_rollen fehlen
-    // Wir lesen sie aus dem Mapping-Sensor (producer_default) und ergänzen später beim Save
-    const map = this._mapping().find((m) => m.topic === id);
+    // Tripel-Felder aus Mapping-Sensor (producer_default | override | wirksam)
+    const map = this._mapping().find((m) => m.topic === id) || {};
+    const tri = (key, fallback) => {
+      const x = map[key];
+      if (x && typeof x === "object") return x;
+      return { producer_default: fallback, override: null, wirksam: fallback };
+    };
     this._editing = {
       typ: "topic",
       isNeu: false,
@@ -706,10 +800,10 @@ class HeroldAdminCard extends HTMLElement {
         name: t.name || "",
         beschreibung: t.beschreibung || "",
         quelle: t.quelle || "",
-        default_severity: t.severity || "info",
-        default_rollen: map?.producer_default || [],
-        log_only: !!t.log_only,
-        interruption_level: t.interruption_level || null,
+        rollen: tri("rollen", []),
+        log_only: tri("log_only", !!t.log_only),
+        interruption_level: tri("interruption_level", t.interruption_level || null),
+        default_severity: tri("default_severity", t.severity || "info"),
       },
     };
     this._render();
@@ -752,15 +846,16 @@ class HeroldAdminCard extends HTMLElement {
   _openMappingEdit(id) {
     const m = this._mapping().find((x) => x.topic === id);
     if (!m) return;
+    const rTri = m.rollen || { producer_default: [], override: null, wirksam: [] };
     this._editing = {
       typ: "mapping",
       isNeu: false,
       id,
       daten: {
         id,
-        producer_default: m.producer_default || [],
-        override_rollen: m.override || m.wirksam || [],
-        wirksam: m.wirksam || [],
+        producer_default: rTri.producer_default || [],
+        override_rollen: rTri.override || rTri.wirksam || [],
+        wirksam: rTri.wirksam || [],
       },
     };
     this._render();
@@ -785,17 +880,46 @@ class HeroldAdminCard extends HTMLElement {
       if (!id) return this._flash("ID ist ein Pflichtfeld", true);
       if (e.isNeu && !/^[a-z0-9_/]+$/.test(id))
         return this._flash("Ungültige Topic-ID (a-z 0-9 _ /)", true);
-      const interruption = get("#f-interruption")?.value || "";
-      res = await this._callService("topic_registrieren", {
-        topic: id,
-        name: get("#f-name")?.value || "",
-        beschreibung: get("#f-beschreibung")?.value || "",
-        quelle: get("#f-quelle")?.value || "",
-        default_severity: get("#f-severity")?.value || "info",
-        default_rollen: multi("#f-rollen"),
-        log_only: !!get("#f-log-only")?.checked,
-        interruption_level: interruption || null,
-      });
+
+      if (e.isNeu) {
+        // Neuer Topic: alles als Producer-Default via topic_registrieren
+        const interruption = get("#f-interruption")?.value || "";
+        res = await this._callService("topic_registrieren", {
+          topic: id,
+          name: get("#f-name")?.value || "",
+          beschreibung: get("#f-beschreibung")?.value || "",
+          quelle: get("#f-quelle")?.value || "",
+          default_severity: get("#f-severity")?.value || "info",
+          default_rollen: multi("#f-rollen"),
+          log_only: !!get("#f-log-only")?.checked,
+          interruption_level: interruption || null,
+        });
+      } else {
+        // Existierend: Producer-Felder via topic_registrieren, Override-Felder via topic_override_setzen
+        const r1 = await this._callService("topic_registrieren", {
+          topic: id,
+          name: get("#f-name")?.value || "",
+          beschreibung: get("#f-beschreibung")?.value || "",
+          quelle: get("#f-quelle")?.value || "",
+        });
+        if (!r1.ok) {
+          this._flash(`Fehler (Topic): ${r1.error || "unbekannt"}`, true);
+          return;
+        }
+        // Override-Werte einsammeln. Leerer Select = explizit null = Override löschen.
+        const sevVal = get("#f-sev-override")?.value || "";
+        const ilVal = get("#f-il-override")?.value || "";
+        const logVal = get("#f-log-override")?.value || ""; // "", "true", "false"
+        const rollenVal = multi("#f-rollen-override");
+        const ovPayload = {
+          topic: id,
+          default_severity: sevVal || null,
+          interruption_level: ilVal || null,
+          log_only: logVal === "" ? null : logVal === "true",
+          default_rollen: rollenVal.length === 0 ? null : rollenVal,
+        };
+        res = await this._callService("topic_override_setzen", ovPayload);
+      }
     } else if (e.typ === "rolle") {
       const id = e.isNeu ? get("#f-id")?.value.trim() : e.id;
       if (!id) return this._flash("ID ist ein Pflichtfeld", true);

@@ -39,6 +39,7 @@ SERVICE_TOPIC_ENTFERNEN: Final = "topic_entfernen"
 SERVICE_ROLLE_ENTFERNEN: Final = "rolle_entfernen"
 SERVICE_EMPFAENGER_ENTFERNEN: Final = "empfaenger_entfernen"
 SERVICE_TOPIC_ROLLE_MAPPING: Final = "topic_rolle_mapping"
+SERVICE_TOPIC_OVERRIDE_SETZEN: Final = "topic_override_setzen"
 SERVICE_EINSTELLUNGEN_SETZEN: Final = "einstellungen_setzen"
 
 EVENT_SENT: Final = f"{DOMAIN}_sent"

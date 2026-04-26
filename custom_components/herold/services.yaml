@@ -262,6 +262,55 @@ topic_rolle_mapping:
       selector:
         boolean:
 
+topic_override_setzen:
+  name: Topic-Override setzen (User-Override für Producer-Defaults)
+  description: >
+    Setzt User-Overrides für die Felder log_only, interruption_level,
+    default_severity und default_rollen eines Topics. Producer-Re-Registrierung
+    überschreibt diese Overrides nicht. Pro Feld: Wert setzen oder explizit
+    null = Override löschen (Producer-Default greift wieder).
+    zuruecksetzen=true entfernt alle Overrides für das Topic auf einen Schlag.
+  fields:
+    topic:
+      name: Topic
+      required: true
+      example: tariff_saver/light_auto_off
+      selector:
+        text:
+    log_only:
+      name: log_only Override
+      description: true/false setzt Override, weglassen = unverändert
+      selector:
+        boolean:
+    interruption_level:
+      name: interruption_level Override
+      selector:
+        select:
+          options:
+            - passive
+            - active
+            - time-sensitive
+            - critical
+    default_severity:
+      name: default_severity Override
+      selector:
+        select:
+          options:
+            - info
+            - warnung
+            - kritisch
+    default_rollen:
+      name: default_rollen Override
+      description: Rollen-IDs (leere Liste = explizit keine Rollen)
+      selector:
+        object:
+    zuruecksetzen:
+      name: Alle Overrides zurücksetzen
+      description: Komplettes Override für das Topic löschen
+      default: false
+      selector:
+        boolean:
+
 einstellungen_setzen:
   name: Einstellungen setzen
   description: >

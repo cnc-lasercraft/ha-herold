@@ -31,6 +31,12 @@ class HeroldConfigStore:
         self.rollen: dict[str, Rolle] = {}
         self.empfaenger: dict[str, Empfaenger] = {}
         self.topic_rolle_mapping: dict[str, list[str]] = {}
+        # Per-Topic User-Overrides für Felder, die sonst Producer-Defaults sind.
+        # Erlaubte Schlüssel pro Topic: "log_only", "interruption_level",
+        # "default_severity". (Rollen-Override liegt in topic_rolle_mapping.)
+        # Schlüssel im Inner-Dict bedeutet "User hat überschrieben" — Wert wird
+        # benutzt; fehlt der Schlüssel, gilt der Producer-Default aus Topic.
+        self.topic_overrides: dict[str, dict[str, Any]] = {}
         self.fallback_rolle: str | None = None
         self.retention_eintraege: int = RETENTION_EINTRAEGE_DEFAULT
         self.retention_tage: int = RETENTION_TAGE_DEFAULT
@@ -51,6 +57,9 @@ class HeroldConfigStore:
             tid: list(rollen)
             for tid, rollen in data.get("topic_rolle_mapping", {}).items()
         }
+        self.topic_overrides = {
+            tid: dict(o) for tid, o in data.get("topic_overrides", {}).items()
+        }
         einst = data.get("einstellungen", {})
         self.fallback_rolle = einst.get("fallback_rolle")
         self.retention_eintraege = einst.get(
@@ -64,6 +73,38 @@ class HeroldConfigStore:
             len(self.empfaenger),
         )
 
+    # ---- Effective-Werte (Override > Producer-Default) ----
+
+    def effective_log_only(self, topic_id: str) -> bool:
+        o = self.topic_overrides.get(topic_id, {})
+        if "log_only" in o:
+            return bool(o["log_only"])
+        topic = self.topics.get(topic_id)
+        return bool(topic.log_only) if topic else False
+
+    def effective_interruption_level(self, topic_id: str) -> str | None:
+        o = self.topic_overrides.get(topic_id, {})
+        if "interruption_level" in o:
+            return o["interruption_level"] or None
+        topic = self.topics.get(topic_id)
+        return topic.interruption_level if topic else None
+
+    def effective_default_severity(self, topic_id: str) -> str | None:
+        o = self.topic_overrides.get(topic_id, {})
+        if "default_severity" in o and o["default_severity"]:
+            return o["default_severity"]
+        topic = self.topics.get(topic_id)
+        return topic.default_severity if topic else None
+
+    def effective_default_rollen(self, topic_id: str) -> tuple[list[str], bool]:
+        """Gibt (rollen, override_aktiv) zurück.
+        override_aktiv=True → User-Override greift (auch bei leerer Liste).
+        """
+        if topic_id in self.topic_rolle_mapping:
+            return list(self.topic_rolle_mapping[topic_id]), True
+        topic = self.topics.get(topic_id)
+        return (list(topic.default_rollen) if topic else []), False
+
     async def async_save(self) -> None:
         data = {
             "topics": {tid: t.to_dict() for tid, t in self.topics.items()},
@@ -71,6 +112,9 @@ class HeroldConfigStore:
             "empfaenger": {eid: e.to_dict() for eid, e in self.empfaenger.items()},
             "topic_rolle_mapping": {
                 tid: list(rollen) for tid, rollen in self.topic_rolle_mapping.items()
+            },
+            "topic_overrides": {
+                tid: dict(o) for tid, o in self.topic_overrides.items()
             },
             "einstellungen": {
                 "fallback_rolle": self.fallback_rolle,
