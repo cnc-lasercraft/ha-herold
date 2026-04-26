@@ -78,6 +78,49 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+# Notify-Backends, die Validierungs-Fehler nur loggen statt werfen.
+# Wir hängen uns während des Service-Calls temporär an diese Logger an,
+# damit `ausliefer_status` solche silent rejects sieht.
+_SILENT_NOTIFY_LOGGERS: dict[str, str] = {
+    "mobile_app_": "homeassistant.components.mobile_app.notify",
+}
+
+
+class _NotifyLogCatcher(logging.Handler):
+    """Sammelt ERROR-Records von einem Notify-Backend während eines Service-Calls."""
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.ERROR)
+        self.errors: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            self.errors.append(record.getMessage())
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _attach_notify_catcher(service: str) -> tuple[_NotifyLogCatcher | None, list[str]]:
+    """Hängt Catcher an die Logger der bekannten silent-failing Notify-Backends.
+    Gibt (Catcher, attached_logger_names) zurück. None wenn nichts zutrifft."""
+    logger_names = [
+        name for prefix, name in _SILENT_NOTIFY_LOGGERS.items() if service.startswith(prefix)
+    ]
+    if not logger_names:
+        return None, []
+    catcher = _NotifyLogCatcher()
+    for name in logger_names:
+        logging.getLogger(name).addHandler(catcher)
+    return catcher, logger_names
+
+
+def _detach_notify_catcher(catcher: _NotifyLogCatcher | None, logger_names: list[str]) -> None:
+    if catcher is None:
+        return
+    for name in logger_names:
+        logging.getLogger(name).removeHandler(catcher)
+
+
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
@@ -567,12 +610,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                         _LOGGER.error("Empfänger '%s': ungültiges Ziel '%s'", empf_id, empf.ziel)
                         continue
 
+                    catcher, attached_loggers = _attach_notify_catcher(parts[1])
                     try:
                         await hass.services.async_call(
                             parts[0], parts[1], notify_data, blocking=True
                         )
-                        ausliefer_status[empf_id] = "ok"
-                        _LOGGER.debug("Zustellung an '%s' (%s) OK", empf_id, empf.ziel)
                     except Exception as err:  # noqa: BLE001
                         ausliefer_status[empf_id] = f"fehler:{err}"
                         _LOGGER.error("Zustellung an '%s' fehlgeschlagen: %s", empf_id, err)
@@ -580,6 +622,33 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                             EVENT_DELIVERY_FAILED,
                             {"topic": topic_id, "empfaenger": empf_id, "fehler": str(err)},
                         )
+                    else:
+                        # Service-Call war ohne Exception erfolgreich — aber manche
+                        # Notify-Backends (z.B. mobile_app) lehnen Payloads still ab
+                        # und loggen nur ERROR. Catcher prüft das.
+                        silent_errors = catcher.errors if catcher else []
+                        if silent_errors:
+                            msg = silent_errors[0]
+                            short = (msg[:200] + "…") if len(msg) > 200 else msg
+                            ausliefer_status[empf_id] = f"fehler:notify_log:{short}"
+                            _LOGGER.error(
+                                "Zustellung an '%s' (%s) silent-rejected: %s",
+                                empf_id, empf.ziel, short,
+                            )
+                            hass.bus.async_fire(
+                                EVENT_DELIVERY_FAILED,
+                                {
+                                    "topic": topic_id,
+                                    "empfaenger": empf_id,
+                                    "fehler": short,
+                                    "quelle": "notify_log",
+                                },
+                            )
+                        else:
+                            ausliefer_status[empf_id] = "ok"
+                            _LOGGER.debug("Zustellung an '%s' (%s) OK", empf_id, empf.ziel)
+                    finally:
+                        _detach_notify_catcher(catcher, attached_loggers)
 
         # -- 6. History-Eintrag --
         eintrag_id = uuid.uuid4().hex
