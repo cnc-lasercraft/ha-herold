@@ -4,7 +4,7 @@
 
 Home Assistant Custom Component — Ziel: zentrale Meldungs-Vermittlung mit **Rollen-Routing (Pub/Sub + RBAC)**.
 
-**Status (2026-04-16):** Design-Entscheidungen getroffen, alle 10 MVP-Fragen in `docs/OPEN_QUESTIONS.md` entschieden. MVP-Skelett als nächstes. Noch kein Code.
+**Status (2026-04-26):** Live im Produktivsystem seit 2026-04-17. MVP komplett, plus User-Override-Layer (Producer-Defaults vs. User-Overrides getrennt) und mobile_app silent-reject Catcher. 13 Services, 9 Sensoren, 2 Custom Cards. GitHub: https://github.com/cnc-lasercraft/ha-herold
 
 Siehe `README.md`, `docs/PROBLEM.md`, `docs/ARCHITECTURE.md`, `docs/OPEN_QUESTIONS.md`.
 
@@ -28,7 +28,7 @@ Siehe `README.md`, `docs/PROBLEM.md`, `docs/ARCHITECTURE.md`, `docs/OPEN_QUESTIO
 
 ## Aktueller Stand
 
-Design-Entscheidungen getroffen (2026-04-16) — siehe `docs/OPEN_QUESTIONS.md` (Name historisch; enthält die entschiedenen 10 MVP-Fragen als Contract). Nächster Schritt: MVP-Skelett unter `custom_components/herold/`. Erster Producer wird die neue Pool-CC.
+Live, MVP + Override-Layer. Producer-Defaults (am `Topic`-Modell) vs. User-Overrides (separater `topic_overrides`-Speicher + `topic_rolle_mapping`) sauber getrennt — Producer-Reregistrierung überschreibt User-Edits nicht mehr. Lese-Pfad geht über `HeroldConfigStore.effective_*()`. Aktive Producer: wallbox/ladeplanung, zeekr, ekz_tariff, tariff_saver. Soak-Phase im Alltag. v2-Themen (Regeln-Engine, Lifecycle/Ack, weitere Empfänger-Typen) auf der Bank.
 
 ## Kontext aus Gründungs-Session (Chat davor)
 
