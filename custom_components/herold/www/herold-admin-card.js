@@ -644,7 +644,7 @@ class HeroldAdminCard extends HTMLElement {
     }
     const kannLoeschen = !e.isNeu && e.typ !== "mapping";
     return `
-      <div class="overlay" data-overlay>
+      <dialog class="modal" data-overlay>
         <div class="dialog" data-dialog>
           <div class="dialog-head">
             <h3>${titel}</h3>
@@ -660,7 +660,7 @@ class HeroldAdminCard extends HTMLElement {
             <button class="primary" data-save>${e.isNeu ? "Anlegen" : "Speichern"}</button>
           </div>
         </div>
-      </div>
+      </dialog>
     `;
   }
 
@@ -717,13 +717,29 @@ class HeroldAdminCard extends HTMLElement {
       })
     );
     const overlay = sr.querySelector("[data-overlay]");
-    if (overlay)
+    if (overlay) {
+      // Native <dialog>: Top-Layer rendering ignoriert Shadow-DOM-/Transform-
+      // Container — funktioniert auch wenn Lovelace-Wrapper transform setzen.
+      if (typeof overlay.showModal === "function" && !overlay.open) {
+        overlay.showModal();
+      }
+      // Klick ausserhalb des Dialog-Inhalts (= auf Backdrop) → schliessen.
+      // Bei <dialog> trifft der Klick das dialog-Element selbst, wenn auf den
+      // ::backdrop geklickt wird.
       overlay.addEventListener("click", (ev) => {
         if (ev.target === overlay) {
           this._editing = null;
           this._render();
         }
       });
+      // ESC-Taste schliesst dialog nativ → wir müssen state syncen.
+      overlay.addEventListener("close", () => {
+        if (this._editing) {
+          this._editing = null;
+          this._render();
+        }
+      });
+    }
     const saveBtn = sr.querySelector("[data-save]");
     if (saveBtn) saveBtn.addEventListener("click", () => this._saveCurrentEdit());
     const delBtn = sr.querySelector("[data-delete]");
@@ -1091,14 +1107,23 @@ class HeroldAdminCard extends HTMLElement {
       }
       .form button.secondary { background: var(--secondary-background-color, #eee); color: var(--primary-text-color); }
 
-      /* Dialog overlay */
-      .overlay {
-        position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
-        display: flex; align-items: center; justify-content: center; z-index: 1000;
+      /* Dialog (native <dialog> — Top-Layer ignoriert Shadow-DOM/transform-Container) */
+      dialog.modal {
+        border: none;
+        padding: 0;
+        background: transparent;
+        width: min(520px, 92vw);
+        max-width: 92vw;
+        max-height: 90vh;
+        overflow: visible;
+        color: var(--primary-text-color);
+      }
+      dialog.modal::backdrop {
+        background: rgba(0, 0, 0, 0.5);
       }
       .dialog {
         background: var(--card-background-color, #fff); border-radius: 12px;
-        width: min(520px, 92vw); max-height: 90vh; overflow: auto;
+        max-height: 90vh; overflow: auto;
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         display: flex; flex-direction: column;
       }
