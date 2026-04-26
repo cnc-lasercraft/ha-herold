@@ -172,7 +172,6 @@ EMPFAENGER_SETZEN_SCHEMA = vol.Schema(
         vol.Optional("typ", default=EMPF_TYP_NOTIFY): vol.In(EMPF_TYPEN),
         vol.Required("ziel"): cv.string,
         vol.Optional("name"): cv.string,
-        vol.Optional("severity_payload"): dict,
     }
 )
 
@@ -368,8 +367,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             existing.ziel = call.data["ziel"]
             if "name" in call.data:
                 existing.name = call.data["name"]
-            if "severity_payload" in call.data:
-                existing.severity_payload = call.data["severity_payload"]
             _LOGGER.info("Empfänger '%s' aktualisiert", empf_id)
         else:
             config_store.empfaenger[empf_id] = Empfaenger(
@@ -377,7 +374,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 typ=call.data["typ"],
                 ziel=call.data["ziel"],
                 name=call.data.get("name", empf_id),
-                severity_payload=call.data.get("severity_payload", {}),
             )
             _LOGGER.info(
                 "Empfänger '%s' erstellt: %s → %s", empf_id, call.data["typ"], call.data["ziel"]
@@ -640,10 +636,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
                     # Payload-Merge-Reihenfolge (spätere gewinnen):
                     # 1. Basis (title, message, actions)
-                    # 2. Empfänger severity_payload[severity] — Default pro Severity
-                    # 3. Topic.interruption_level → data.push.interruption-level (Topic-Default)
-                    # 4. senden()-payload — expliziter Passthrough vom Producer
-                    # 5. senden()-interruption_level — höchste Priorität, überschreibt alles
+                    # 2. Topic.interruption_level (effektiv) → data.push.interruption-level
+                    # 3. senden()-payload — expliziter Passthrough vom Producer
+                    # 4. senden()-interruption_level — höchste Priorität, überschreibt alles
                     notify_data: dict[str, Any] = {
                         "title": titel,
                         "message": message or titel,
@@ -651,10 +646,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
                     if actions:
                         notify_data.setdefault("data", {})["actions"] = actions
-
-                    sev_override = empf.severity_payload.get(severity)
-                    if sev_override:
-                        notify_data = _deep_merge(notify_data, sev_override)
 
                     eff_il = config_store.effective_interruption_level(topic_id)
                     if eff_il:
@@ -721,9 +712,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         eintrag_id = uuid.uuid4().hex
         zeitstempel = datetime.now(tz=timezone.utc).isoformat()
 
-        # Effektiven interruption_level ermitteln (nur was Herold explizit setzt,
-        # Empfänger-severity_payload-Default wird nicht berücksichtigt).
-        # Quelle "topic" deckt Producer-Default UND User-Override ab.
+        # Effektiven interruption_level ermitteln. Quelle "topic" deckt
+        # Producer-Default UND User-Override ab.
         if call_interruption_level:
             effektiver_il: str | None = call_interruption_level
             il_quelle: str | None = "call"

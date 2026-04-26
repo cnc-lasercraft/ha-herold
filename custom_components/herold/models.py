@@ -75,7 +75,6 @@ class Empfaenger:
     typ: str
     ziel: str
     name: str = ""
-    severity_payload: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -83,17 +82,18 @@ class Empfaenger:
             "typ": self.typ,
             "ziel": self.ziel,
             "name": self.name,
-            "severity_payload": dict(self.severity_payload),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Empfaenger":
+        # severity_payload wurde mit dem Override-Layer obsolet (siehe
+        # interruption_level pro Topic/Call). Alte Werte aus der Persistenz
+        # werden ignoriert und beim nächsten Save weggeschrieben.
         return cls(
             id=data["id"],
             typ=data["typ"],
             ziel=data["ziel"],
             name=data.get("name", ""),
-            severity_payload=dict(data.get("severity_payload", {})),
         )
 
 

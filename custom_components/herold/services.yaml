@@ -56,7 +56,7 @@ senden:
     interruption_level:
       name: iOS Interruption-Level
       description: >
-        Überschreibt Topic-Default und Empfänger-severity_payload (höchste Priorität).
+        Überschreibt den Topic-Default (höchste Priorität).
         'time-sensitive' durchbricht Focus-Modes, 'critical' auch Silent/DND
         (benötigt Critical-Alerts-Permission in der HA Companion App).
       selector:
@@ -123,7 +123,7 @@ topic_registrieren:
       name: iOS Interruption-Level (Topic-Default)
       description: >
         Default-Interruption-Level für dieses Topic. Kann per senden()-Call
-        überschrieben werden. Leer = Empfänger-severity_payload gewinnt.
+        überschrieben werden. Leer = kein Topic-Default (Empfänger-Default greift).
       selector:
         select:
           options:
@@ -203,12 +203,6 @@ empfaenger_setzen:
       example: iPhone Urs
       selector:
         text:
-    severity_payload:
-      name: Severity-Payload
-      description: "Payload-Override pro Severity: {info: {...}, warnung: {...}, kritisch: {...}}"
-      default: {}
-      selector:
-        object:
 
 rolle_entfernen:
   name: Rolle entfernen
