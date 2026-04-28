@@ -394,7 +394,110 @@ for eintrag in response["eintraege"]:
 
 Für sehr gesprächige Producer mit `log_only: true`: bedenke, dass jeder Eintrag Platz in der History belegt. Bei hohem Durchsatz (mehrere pro Minute) empfiehlt sich, die Retention-Grenzen zu reduzieren oder die Producer-Frequenz zu drosseln.
 
-## Was Herold für dich übernimmt
+## Eigene Herold-View in deiner CC (Konvention)
+
+**Konvention:** Jeder Producer stellt seine eigenen Herold-Meldungen in einer eigenen Lovelace-View *innerhalb* seines Bereichs dar — gefiltert auf das eigene Topic-Prefix. So sieht der Pool-Bereich nur Pool-Logs, der Wallbox-Bereich nur Wallbox-Logs etc. Zentrale Sicht über alles bleibt die Admin-Card im Herold-Dashboard.
+
+**Warum:** Der Producer kennt seine Topics am besten und ist der natürliche Ort, um sie zu betrachten. Wer am Pool arbeitet, soll Pool-Logs nicht erst aus 1000 fremden Einträgen filtern müssen.
+
+### Card mit fixem Filter
+
+Die `herold-log-card` unterstützt dafür drei Config-Optionen:
+
+| Option | Typ | Wirkung |
+|---|---|---|
+| `topic` | string | Topic-Filter vorbelegen — exakt (`pool/ph/niedrig`) oder mit Wildcard (`pool/*`) |
+| `severity` | `info` / `warnung` / `kritisch` | Severity-Filter vorbelegen |
+| `lock_filters` | bool | Filter-Bar ausblenden — die Card zeigt dann **nur** den per Config festgelegten Ausschnitt |
+| `title` | string | Header-Text (Default: "Herold Log") |
+| `limit` | int | Max. Einträge (Default: 200) |
+
+**Empfohlenes Muster für eine Producer-View** — feste Filter, kein UI-Filter, eigener Titel:
+
+```yaml
+title: Log
+path: log
+icon: mdi:text-box-outline
+type: panel
+cards:
+  - type: custom:herold-log-card
+    title: Pool-Log
+    topic: pool/*
+    lock_filters: true
+    limit: 100
+```
+
+Wenn `lock_filters` weggelassen wird (oder `false`), wird `topic`/`severity` als **weicher Default** vorbelegt — der User kann den Filter im UI weiter einschränken oder ändern.
+
+### Topic-Prefix als Konvention
+
+Damit das Filtern via `pool/*` sauber funktioniert, muss jeder Producer ein **eindeutiges, konsistentes Topic-Prefix** verwenden. Das Prefix ist gleichzeitig die "Identität" des Producers im Herold-Log — es taucht in der Admin-Card, der Producer-View und dem `quelle`-Feld der Topic-Registrierung auf.
+
+### Aktueller Stand der Producer-Views
+
+| Producer | Topic-Prefix | Dashboard | View-Pfad |
+|---|---|---|---|
+| Pool-Steuerung | `pool/*` | `pool-steuerung` | `/pool-steuerung/log` |
+| Zeekr | `zeekr/*` | `ev-fahrzeuge` | `/ev-fahrzeuge/zeekr-log` |
+| Wallbox/Ladeplanung | `wallbox/*` | `ev-fahrzeuge` | `/ev-fahrzeuge/wallbox-log` |
+| EKZ Tariff | `ekz_tariff/*` | `ekz-tariff` | `/ekz-tariff/log` |
+| Tariff Saver | `tariff_saver/*` | `tariff-saver-price-curve-15-min` | `/tariff-saver-price-curve-15-min/log` |
+
+**Kandidaten für später:** `uniali/*` (Dashboard `uniali-audit` — Herold-Anbindung steht noch aus), `backup/*`, `miele/*`, `garage/*`, `licht/*` etc.
+
+### Rezept: Neue Producer-Log-View nachbauen
+
+Wenn ein Producer Herold neu nutzt oder ein bestehender Producer eine eigene View bekommen soll:
+
+1. **Topic-Prefix festlegen** und konsistent in allen Topics des Producers verwenden (siehe Tabelle oben).
+2. **Topics registrieren** beim CC-Setup (Schritt 2 oben), `quelle: "custom_components.<producer>"` setzen.
+3. **Log-View ans Producer-Dashboard hängen.** Empfohlene Card-Config:
+   ```yaml
+   title: Log
+   path: log
+   icon: mdi:text-box-outline
+   type: panel
+   cards:
+     - type: custom:herold-log-card
+       title: <Producer>-Log
+       topic: <prefix>/*
+       lock_filters: true
+       limit: 100
+   ```
+   Hinzufügen entweder in der Lovelace-UI (Dashboard öffnen → ⋮ → Dashboard bearbeiten → +Ansicht hinzufügen) oder via MCP:
+   ```
+   ha_config_set_dashboard(url_path="<dashboard>", config_hash=<hash>,
+     python_transform='config["views"].append({...wie oben als dict...})')
+   ```
+
+Mehr braucht's nicht — die Konvention ist **Topic-Prefix + eine Log-View pro Dashboard**.
+
+### Card-Features (Nutzer-Ebene)
+
+In der gerenderten Card hat der User folgende Interaktion:
+- **Sortieren**: Klick auf Spaltenkopf (Zeit/Topic/Titel) toggelt asc/desc, Pfeil zeigt Richtung
+- **Severity-Cycle**: Klick auf "Sev." cycelt Filter alle → warnung → info → kritisch → alle
+- **Detail**: Klick auf Zeile öffnet/schließt Detail-Box mit Nachricht, Rollen, Empfängern, Zustellstatus
+- **Live-Updates**: Card abonniert `herold_sent` und lädt bei jeder neuen Meldung neu
+
+### Card-Code aktualisieren (Deploy)
+
+Wenn `herold-log-card.js` im Repo geändert wurde:
+
+1. **Datei deployen** nach `/homeassistant/www/`:
+   ```bash
+   cat custom_components/herold/www/herold-log-card.js | \
+     ssh has "cat > /homeassistant/www/herold-log-card.js"
+   ```
+2. **Cache-Bust** der Lovelace-Resource (Browser cached fix, ohne Bump zieht der neue Code nicht):
+   ```
+   ha_config_set_dashboard_resource(
+     resource_id=<id>, url="/local/herold-log-card.js?v=<N+1>",
+     resource_type="module")
+   ```
+3. **Hard-Refresh** im Browser (Cmd+Shift+R) auf einer Producer-View.
+
+
 
 - **Routing:** Topic → Rollen → Empfänger. Du sagst *was* passiert ist, Herold weiss *wer* es erfahren muss.
 - **Device-Abstraktion:** Kein `notify.mobile_app_iphone_17_ul` mehr im Code. Bei Gerätewechsel: eine Stelle im Herold-Config ändern.

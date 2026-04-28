@@ -6,12 +6,19 @@ class HeroldLogCard extends HTMLElement {
     this._topicFilter = "";
     this._severityFilter = "";
     this._textSearch = "";
+    this._sortKey = "zeitstempel";
+    this._sortDir = "desc";
     this._unsubscribe = null;
     this._initialized = false;
   }
 
   setConfig(config) {
     this.config = config || {};
+    // Producer-View-Konvention: Topic-Filter aus Config vorbelegen.
+    // Bei lock_filters: true wird nur der Topic-Filter ausgeblendet — Suche
+    // und Severity-Filter bleiben für den Nutzer verfügbar.
+    this._topicFilter = this.config.topic || "";
+    this._severityFilter = this.config.severity || "";
   }
 
   set hass(hass) {
@@ -21,8 +28,11 @@ class HeroldLogCard extends HTMLElement {
       this._render();
       this._loadHistory();
       this._subscribeEvents();
+      this._updateTopicList();
     }
-    this._updateTopicList();
+    // Topic-Liste wird per Event "herold_topic_registered" aktualisiert,
+    // NICHT bei jedem set hass — sonst schließt das Re-Set von dl.innerHTML
+    // das offene Dropdown sofort wieder (HA triggert set hass dauernd).
   }
 
   _updateTopicList() {
@@ -151,6 +161,8 @@ class HeroldLogCard extends HTMLElement {
           color: var(--secondary-text-color, #666);
           font-weight: 500; white-space: nowrap;
         }
+        th.sortable, th.sev-cycle { cursor: pointer; user-select: none; }
+        th.sortable:hover, th.sev-cycle:hover { color: var(--primary-color, #03a9f4); }
         td {
           padding: 8px 8px 8px 0;
           border-bottom: 1px solid var(--divider-color, #e0e0e0);
@@ -189,16 +201,17 @@ class HeroldLogCard extends HTMLElement {
         .zeit { white-space: nowrap; font-size: 12px; color: var(--secondary-text-color); }
       </style>
       <ha-card>
-        <div class="header">Herold Log</div>
+        <div class="header">${this._esc(this.config.title || "Herold Log")}</div>
         <div class="filters">
-          <input class="filter-topic" type="text" id="topic" list="topic-list" placeholder="Topic (z.B. zeekr/*)" />
-          <datalist id="topic-list"></datalist>
+          ${this.config.lock_filters ? "" : `
+          <input class="filter-topic" type="text" id="topic" list="topic-list" placeholder="Topic (z.B. zeekr/*)" value="${this._esc(this._topicFilter)}" />
+          <datalist id="topic-list"></datalist>`}
           <input class="filter-text" type="text" id="text" placeholder="Suche in Titel / Nachricht" />
           <select id="severity">
             <option value="">Alle</option>
-            <option value="info">Info</option>
-            <option value="warnung">Warnung</option>
-            <option value="kritisch">Kritisch</option>
+            <option value="info"${this._severityFilter === "info" ? " selected" : ""}>Info</option>
+            <option value="warnung"${this._severityFilter === "warnung" ? " selected" : ""}>Warnung</option>
+            <option value="kritisch"${this._severityFilter === "kritisch" ? " selected" : ""}>Kritisch</option>
           </select>
           <button id="search">Suchen</button>
         </div>
@@ -208,14 +221,17 @@ class HeroldLogCard extends HTMLElement {
     `;
 
     const doSearch = () => {
-      this._topicFilter = this.shadowRoot.getElementById("topic").value.trim();
+      if (!this.config.lock_filters) {
+        this._topicFilter = this.shadowRoot.getElementById("topic").value.trim();
+      }
       this._textSearch = this.shadowRoot.getElementById("text").value.trim();
       this._severityFilter = this.shadowRoot.getElementById("severity").value;
       this._loadHistory();
     };
 
     this.shadowRoot.getElementById("search").addEventListener("click", doSearch);
-    for (const id of ["topic", "text"]) {
+    const editableInputs = this.config.lock_filters ? ["text"] : ["topic", "text"];
+    for (const id of editableInputs) {
       this.shadowRoot.getElementById(id).addEventListener("keydown", (e) => {
         if (e.key === "Enter") doSearch();
       });
@@ -235,8 +251,28 @@ class HeroldLogCard extends HTMLElement {
 
     countEl.textContent = this._entries.length + " Einträge";
 
-    const rows = this._entries
-      .map((e, i) => {
+    // Severity-Sortierung folgt der Severity-Hierarchie, nicht alphabetisch.
+    const sevOrder = { info: 1, warnung: 2, kritisch: 3 };
+    const sortVal = (e) => {
+      switch (this._sortKey) {
+        case "topic": return e.topic || "";
+        case "severity": return sevOrder[e.severity] || 0;
+        case "titel": return (e.titel || "").toLowerCase();
+        case "zeitstempel":
+        default: return e.zeitstempel || "";
+      }
+    };
+    const dir = this._sortDir === "asc" ? 1 : -1;
+    const sorted = [...this._entries].sort((a, b) => {
+      const va = sortVal(a), vb = sortVal(b);
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+
+    const rows = sorted
+      .map((e) => {
+        const idx = this._entries.indexOf(e);
         const d = new Date(e.zeitstempel);
         const zeit = d.toLocaleString("de-CH", {
           day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -252,7 +288,7 @@ class HeroldLogCard extends HTMLElement {
         const fb = e.fallback_verwendet ? ' <span class="fallback">⚠ Fallback</span>' : "";
         const msg = e.message ? `<div class="msg">${this._esc(e.message).substring(0, 120)}</div>` : "";
 
-        return `<tr class="row" data-idx="${i}">
+        return `<tr class="row" data-idx="${idx}">
           <td class="zeit">${zeit}</td>
           <td class="topic-path">${this._esc(e.topic)}</td>
           <td><span class="sev sev-${e.severity}">${e.severity}</span></td>
@@ -262,14 +298,51 @@ class HeroldLogCard extends HTMLElement {
       })
       .join("");
 
+    const arrow = (k) =>
+      this._sortKey === k ? (this._sortDir === "asc" ? " ▲" : " ▼") : "";
+    const sortable = (k, label) =>
+      `<th class="sortable" data-sort="${k}">${label}${arrow(k)}</th>`;
+
+    // Sev.-Header zeigt den aktuell aktiven Filter und cycelt bei Klick durch
+    // alle → warnung → info → kritisch → alle.
+    const sevLabel = this._severityFilter
+      ? `Sev. (${this._severityFilter})`
+      : "Sev.";
+
     container.innerHTML = `
       <table>
         <thead><tr>
-          <th>Zeit</th><th>Topic</th><th>Sev.</th><th>Titel</th><th>Status</th>
+          ${sortable("zeitstempel", "Zeit")}
+          ${sortable("topic", "Topic")}
+          <th class="sev-cycle">${sevLabel}</th>
+          ${sortable("titel", "Titel")}
+          <th>Status</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     `;
+
+    container.querySelectorAll("th.sortable").forEach((th) => {
+      th.addEventListener("click", () => {
+        const k = th.dataset.sort;
+        if (this._sortKey === k) {
+          this._sortDir = this._sortDir === "asc" ? "desc" : "asc";
+        } else {
+          this._sortKey = k;
+          this._sortDir = k === "zeitstempel" ? "desc" : "asc";
+        }
+        this._renderTable();
+      });
+    });
+
+    container.querySelector("th.sev-cycle")?.addEventListener("click", () => {
+      const cycle = ["", "warnung", "info", "kritisch"];
+      const next = cycle[(cycle.indexOf(this._severityFilter) + 1) % cycle.length];
+      this._severityFilter = next;
+      const sel = this.shadowRoot.getElementById("severity");
+      if (sel) sel.value = next;
+      this._loadHistory();
+    });
 
     // Klick auf Zeile → Detail-Toggle
     container.querySelectorAll("tr.row").forEach((tr) => {
@@ -329,5 +402,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "herold-log-card",
   name: "Herold Log",
-  description: "Zentrales Herold-Log mit Filter- und Suchmöglichkeiten",
+  description:
+    "Zentrales Herold-Log mit Filter- und Suchmöglichkeiten. " +
+    "Producer-Views: topic/severity vorbelegen, lock_filters: true blendet die Filter-Bar aus.",
 });

@@ -28,7 +28,7 @@ Siehe `README.md`, `docs/PROBLEM.md`, `docs/ARCHITECTURE.md`, `docs/OPEN_QUESTIO
 
 ## Aktueller Stand
 
-Live, MVP + Override-Layer. Producer-Defaults (am `Topic`-Modell) vs. User-Overrides (separater `topic_overrides`-Speicher + `topic_rolle_mapping`) sauber getrennt — Producer-Reregistrierung überschreibt User-Edits nicht mehr. Lese-Pfad geht über `HeroldConfigStore.effective_*()`. Aktive Producer: wallbox/ladeplanung, zeekr, ekz_tariff, tariff_saver. Soak-Phase im Alltag. v2-Themen (Regeln-Engine, Lifecycle/Ack, weitere Empfänger-Typen) auf der Bank.
+Live, MVP + Override-Layer. Producer-Defaults (am `Topic`-Modell) vs. User-Overrides (separater `topic_overrides`-Speicher + `topic_rolle_mapping`) sauber getrennt — Producer-Reregistrierung überschreibt User-Edits nicht mehr. Lese-Pfad geht über `HeroldConfigStore.effective_*()`. Aktive Producer: pool, wallbox/ladeplanung, zeekr, ekz_tariff, tariff_saver. **Producer-Log-View-Konvention** etabliert (2026-04-26): jeder Producer hat eine eigene Lovelace-View in seinem Dashboard, gefiltert via `lock_filters` + `topic`-Prefix der `herold-log-card` (v5: Sortier-Header, Sev-Cycle, Datalist-Fix). Rezept zum Nachbauen in `docs/PRODUCER_GUIDE.md`. uniali als nächster Producer-Kandidat (Anbindung steht aus). Soak-Phase im Alltag. v2-Themen (Regeln-Engine, Lifecycle/Ack, weitere Empfänger-Typen) auf der Bank.
 
 ## Kontext aus Gründungs-Session (Chat davor)
 
