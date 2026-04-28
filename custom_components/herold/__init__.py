@@ -538,6 +538,23 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         call_interruption_level: str | None = call.data.get("interruption_level")
         fallback_verwendet = False
 
+        # Sanity-Check: häufiger Producer-Fehler ist `payload.data.data.<feld>`
+        # statt `payload.data.<feld>`. Resultat: Cloud Push Gateway lehnt ab mit
+        # "data must only contain string values" und die Meldung verschwindet.
+        # Wir entschachteln einmalig und warnen — Producer sieht den Fehler im
+        # Log, der Push kommt aber sofort durch.
+        if isinstance(payload, dict):
+            inner = payload.get("data")
+            if isinstance(inner, dict) and isinstance(inner.get("data"), dict):
+                _LOGGER.warning(
+                    "Topic '%s': payload.data.data erkannt — entschachtelt zu "
+                    "payload.data. Producer schreibt eine 'data:'-Ebene zu viel; "
+                    "korrekte Form ist payload.data.<feld>, nicht payload.data."
+                    "data.<feld>. Siehe docs/PRODUCER_GUIDE.md.",
+                    topic_id,
+                )
+                payload = {**payload, "data": inner["data"]}
+
         # -- 1. Topic nachschlagen / implizit anlegen --
         topic = config_store.topics.get(topic_id)
         if not topic:
@@ -653,6 +670,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                             "interruption-level"
                         ] = eff_il
 
+                    # Snapshot OHNE Producer-Payload — Fallback für Retry, falls
+                    # der Cloud Push Gateway eine fehlerhafte Producer-Payload
+                    # ablehnt (silent-reject). Damit kommt zumindest die nackte
+                    # Meldung durch, statt komplett zu verschwinden.
+                    notify_data_safe = deepcopy(notify_data)
+
                     if payload:
                         notify_data = _deep_merge(notify_data, payload)
 
@@ -660,6 +683,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                         notify_data.setdefault("data", {}).setdefault("push", {})[
                             "interruption-level"
                         ] = call_interruption_level
+                        notify_data_safe.setdefault("data", {}).setdefault(
+                            "push", {}
+                        )["interruption-level"] = call_interruption_level
 
                     # notify.mobile_app_xxx → domain="notify", service="mobile_app_xxx"
                     parts = empf.ziel.split(".", 1)
@@ -688,25 +714,120 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                         if silent_errors:
                             msg = silent_errors[0]
                             short = (msg[:200] + "…") if len(msg) > 200 else msg
-                            ausliefer_status[empf_id] = f"fehler:notify_log:{short}"
-                            _LOGGER.error(
-                                "Zustellung an '%s' (%s) silent-rejected: %s",
-                                empf_id, empf.ziel, short,
-                            )
-                            hass.bus.async_fire(
-                                EVENT_DELIVERY_FAILED,
-                                {
-                                    "topic": topic_id,
-                                    "empfaenger": empf_id,
-                                    "fehler": short,
-                                    "quelle": "notify_log",
-                                },
-                            )
+
+                            # Fail-safe: Bei warnung/kritisch versuchen wir's
+                            # einmal ohne Producer-Payload — die nackte Meldung
+                            # soll auch dann ankommen, wenn der Producer eine
+                            # kaputte Payload baut (verlorene Critical-Sounds
+                            # sind besser als verlorene Wasserleck-Warnung).
+                            retry_geklappt = False
+                            if payload and severity in ("warnung", "kritisch"):
+                                _LOGGER.warning(
+                                    "Zustellung an '%s' silent-rejected (%s) — "
+                                    "Retry ohne payload (severity=%s)",
+                                    empf_id, short, severity,
+                                )
+                                catcher2, attached2 = _attach_notify_catcher(parts[1])
+                                try:
+                                    await hass.services.async_call(
+                                        parts[0], parts[1], notify_data_safe,
+                                        blocking=True,
+                                    )
+                                    retry_errors = catcher2.errors if catcher2 else []
+                                    if not retry_errors:
+                                        retry_geklappt = True
+                                except Exception as retry_err:  # noqa: BLE001
+                                    _LOGGER.error(
+                                        "Retry ohne payload für '%s' warf "
+                                        "Exception: %s", empf_id, retry_err,
+                                    )
+                                finally:
+                                    _detach_notify_catcher(catcher2, attached2)
+
+                            if retry_geklappt:
+                                ausliefer_status[empf_id] = "ok_payload_verworfen"
+                                _LOGGER.warning(
+                                    "Zustellung an '%s' (%s) durch Retry ohne "
+                                    "payload gerettet — Producer-Payload defekt: %s",
+                                    empf_id, empf.ziel, short,
+                                )
+                                hass.bus.async_fire(
+                                    EVENT_DELIVERY_FAILED,
+                                    {
+                                        "topic": topic_id,
+                                        "empfaenger": empf_id,
+                                        "fehler": short,
+                                        "quelle": "notify_log",
+                                        "gerettet": True,
+                                    },
+                                )
+                            else:
+                                ausliefer_status[empf_id] = f"fehler:notify_log:{short}"
+                                _LOGGER.error(
+                                    "Zustellung an '%s' (%s) silent-rejected: %s",
+                                    empf_id, empf.ziel, short,
+                                )
+                                hass.bus.async_fire(
+                                    EVENT_DELIVERY_FAILED,
+                                    {
+                                        "topic": topic_id,
+                                        "empfaenger": empf_id,
+                                        "fehler": short,
+                                        "quelle": "notify_log",
+                                    },
+                                )
                         else:
                             ausliefer_status[empf_id] = "ok"
                             _LOGGER.debug("Zustellung an '%s' (%s) OK", empf_id, empf.ziel)
                     finally:
                         _detach_notify_catcher(catcher, attached_loggers)
+
+            # -- Notbremse: severity=kritisch und kein Empfänger erreicht --
+            # Wenn eine als 'kritisch' markierte Meldung nirgends ankommt, darf
+            # sie nicht stillschweigend verschwinden. persistent_notification ist
+            # HA-nativ (kein Cloud-Gateway), bleibt im Frontend bis zum Wegklicken
+            # und ist damit der robusteste Notfallkanal.
+            if (
+                severity == "kritisch"
+                and empfaenger_ids
+                and not any(s.startswith("ok") for s in ausliefer_status.values())
+            ):
+                _LOGGER.error(
+                    "Total-Ausfall bei kritischer Meldung '%s' — Notbremse "
+                    "persistent_notification (alle %d Empfänger gescheitert)",
+                    topic_id, len(empfaenger_ids),
+                )
+                fehler_zeilen = "\n".join(
+                    f"- {eid}: {st}" for eid, st in ausliefer_status.items()
+                )
+                try:
+                    await hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"⛔ Herold KRITISCH nicht zugestellt: {titel}",
+                            "message": (
+                                f"**Topic:** {topic_id}\n"
+                                f"**Severity:** {severity}\n\n"
+                                f"{message}\n\n"
+                                f"---\n"
+                                f"**Zustellung an alle {len(empfaenger_ids)} "
+                                f"Empfänger gescheitert:**\n"
+                                f"{fehler_zeilen}\n\n"
+                                f"_Notbremse: Eine als 'kritisch' markierte_\n"
+                                f"_Herold-Nachricht hat keinen einzigen_\n"
+                                f"_Empfänger erreicht._"
+                            ),
+                            "notification_id": f"herold_kritisch_{uuid.uuid4().hex[:8]}",
+                        },
+                        blocking=True,
+                    )
+                    ausliefer_status["__notbremse"] = "persistent_notification"
+                except Exception as err:  # noqa: BLE001
+                    ausliefer_status["__notbremse"] = f"fehler:{err}"
+                    _LOGGER.error(
+                        "Notbremse persistent_notification fehlgeschlagen: %s", err,
+                    )
 
         # -- 6. History-Eintrag --
         eintrag_id = uuid.uuid4().hex

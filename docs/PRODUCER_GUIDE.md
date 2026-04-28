@@ -159,20 +159,65 @@ Die Action-Antwort kommt weiterhin als normales HA-Event `mobile_app_notificatio
 
 ## Schritt 5: Payload durchreichen (Bilder, Sounds, etc.)
 
-Für Kamera-Snapshots, Custom-Sounds oder andere device-spezifische Daten:
+Für Kamera-Snapshots, Custom-Sounds oder andere device-spezifische Daten gibt
+es das Feld `payload`. Es wird 1:1 ans Notify-Backend (z.B. `notify.mobile_app_*`)
+durchgereicht.
+
+### ⚠ Payload-Struktur — die häufigste Falle
+
+`payload.data.<feld>` wird zu `data.<feld>` im Notify-Service-Call. Die HA
+Companion App-Doku zeigt Beispiele in Form `data: { push: {...} }` — bei Herold
+heißt das **`payload: { data: { push: {...} } }`**, NICHT `payload: { data: { data: { push: {...} } } }`.
+
+**Eine `data:`-Ebene zu viel** → Cloud Push Gateway lehnt ab mit der irreführenden
+Meldung *"data must only contain string values"* → Push verschwindet stillschweigend.
+
+```yaml
+# ❌ FALSCH — eine data:-Ebene zu viel, Push wird vom Gateway gefressen
+payload:
+  data:
+    data:                       # ← diese Ebene gehört NICHT hin
+      push:
+        sound: { name: default, critical: 1, volume: 1 }
+      tag: wasserleck
+
+# ✓ RICHTIG — payload.data wird direkt zu service-call data
+payload:
+  data:
+    push:
+      sound: { name: default, critical: 1, volume: 1 }
+    tag: wasserleck
+    persistent: true
+```
+
+**Schutzmechanismus:** Herold erkennt das doppelte `data.data`-Pattern beim
+`senden`-Aufruf und entschachtelt automatisch — mit einer `WARNING`-Logzeile
+("payload.data.data erkannt — entschachtelt zu payload.data"). Die Meldung
+kommt also durch, aber der Producer-Bug muss trotzdem gefixt werden.
+
+### Critical Notification (iOS) — Beispiel
 
 ```python
 await self.hass.services.async_call(
     HEROLD_DOMAIN,
     "senden",
     {
-        "topic": "pool/truebung",
-        "titel": "Pool trüb",
-        "message": "Trübungswert über Schwellwert, siehe Kamera",
-        "severity": "info",
+        "topic": "wasser/leck/waschkueche",
+        "titel": "💧 WASSERLECK!",
+        "message": "Sensor Waschküche meldet Wasser",
+        "severity": "kritisch",
+        "interruption_level": "critical",   # ← als eigener Parameter, NICHT in payload
         "payload": {
             "data": {
-                "image": "/api/camera_proxy/camera.pool_kamera",
+                "push": {
+                    "sound": {
+                        "name": "default",
+                        "critical": 1,
+                        "volume": 1,
+                    },
+                },
+                "tag": "wasserleck_waschkueche",
+                "persistent": True,
             }
         },
     },
@@ -180,7 +225,38 @@ await self.hass.services.async_call(
 )
 ```
 
-`payload` wird **deep-merged** mit dem `severity_payload` des jeweiligen Empfängers. Die Empfänger-Config hat Vorrang (z.B. Critical-Alert-Sound bei `kritisch`), dein Payload ergänzt (z.B. Bild).
+### Bild / Kamera-Snapshot
+
+```python
+"payload": {
+    "data": {
+        "image": "/api/camera_proxy/camera.pool_kamera",
+    }
+}
+```
+
+### Was wenn der Producer-Payload trotzdem fehlerhaft ist
+
+Bei `severity` ∈ `{warnung, kritisch}` versucht Herold automatisch einen
+**Retry ohne `payload`**, wenn das Notify-Backend silent ablehnt. Damit kommt
+zumindest die nackte Textmeldung an — Custom-Sound oder Critical-Alert geht
+in dem Fall verloren, aber die Information selbst nicht. Der Status der
+Zustellung lautet dann `ok_payload_verworfen` und im Log steht die Diagnose.
+
+Wenn auch der Retry scheitert UND es eine `kritisch`-Meldung war, schaltet
+Herold die Notbremse: ein **`persistent_notification` im HA-Frontend**, das
+solange sichtbar bleibt bis du es wegklickst.
+
+### Hinweise
+
+- `interruption_level` ist ein **eigener `senden`-Parameter**, NICHT in der
+  Payload. Wenn du beides setzt, gewinnt der Parameter (höchste Priorität).
+- Werte unter `payload.data.push.sound.{critical, volume}` müssen numerisch
+  bleiben (das ist Apple-APNS-Spec — die Cloud akzeptiert diese int-Werte
+  für bekannte Felder).
+- `payload` wird **deep-merged** mit den Herold-Defaults (Topic-`interruption_level`,
+  `actions`). Felder im `payload` haben Vorrang, außer der `senden`-Parameter
+  `interruption_level` ist explizit gesetzt.
 
 ## Topic-Namenskonvention
 
@@ -206,10 +282,9 @@ pv/ueberschuss
 Unabhängig von Severity kannst du das iOS-Interruption-Level steuern — pro Topic (Default) oder pro Meldung (Override).
 
 **Merge-Reihenfolge** (spätere gewinnen):
-1. Empfänger `severity_payload[severity]` — schwächste Priorität
-2. `Topic.interruption_level` — Topic-Default (gesetzt via `topic_registrieren` oder Admin-Card)
-3. `senden(..., payload=...)` — allgemeiner Passthrough
-4. `senden(..., interruption_level=...)` — höchste Priorität
+1. `Topic.interruption_level` — Topic-Default (gesetzt via `topic_registrieren` oder Admin-Card)
+2. `senden(..., payload=...)` — allgemeiner Passthrough
+3. `senden(..., interruption_level=...)` — höchste Priorität
 
 **Topic-Default setzen:**
 
@@ -248,7 +323,7 @@ data:
 | `warnung` | Aufmerksamkeit nötig, nicht dringend | Time-sensitive Push |
 | `kritisch` | Sofortiges Handeln erforderlich | Critical-Alert, lauter Ton |
 
-Die Severity beeinflusst im MVP **nicht** das Routing (wer bekommt's), sondern nur **wie** es zugestellt wird (via `severity_payload` am Empfänger). Der Producer entscheidet die Severity, der Empfänger entscheidet die Darstellung.
+Die Severity beeinflusst im MVP **nicht** das Routing (wer bekommt's), sondern nur die Darstellung am Empfänger und das Fail-safe-Verhalten von Herold: bei `warnung`/`kritisch` versucht Herold bei silent-rejects einen Retry ohne `payload`, bei `kritisch` zusätzlich eine `persistent_notification`-Notbremse, falls keine Zustellung gelingt. Bei `info` wird ein einzelner fehlgeschlagener Push nicht heroisch gerettet.
 
 ## Zusammenfassung: Minimale Integration
 

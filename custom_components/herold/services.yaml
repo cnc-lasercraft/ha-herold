@@ -49,7 +49,15 @@ senden:
         object:
     payload:
       name: Payload
-      description: Passthrough-Daten für Notify-Kanal (Bilder, Sound, etc.)
+      description: >
+        Passthrough-Daten für den Notify-Kanal (Bilder, Sound, Tag, push-Optionen).
+        Struktur: payload.data.<feld> wird zu data.<feld> im Notify-Service-Call.
+        ⚠ Nicht payload.data.data.<feld> schreiben — das ist eine Ebene zu viel
+        und wird vom Cloud Push Gateway abgelehnt ("data must only contain string
+        values"). Herold entschachtelt das Pattern automatisch und warnt im Log,
+        aber besser gleich richtig schreiben. Beispiel für iOS Critical Alert:
+        {data: {push: {sound: {name: default, critical: 1, volume: 1}}, tag: x,
+        persistent: true}}. Siehe docs/PRODUCER_GUIDE.md → Schritt 5.
       default: {}
       selector:
         object:
