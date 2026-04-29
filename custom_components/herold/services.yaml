@@ -25,6 +25,18 @@ senden:
       selector:
         text:
           multiline: true
+    tts_message:
+      name: TTS-Sprechtext (optional)
+      description: >
+        Abweichender Sprechtext nur für TTS-Empfänger. Wenn nicht gesetzt,
+        wird message (oder als Fallback titel) gesprochen. Nützlich wenn der
+        Sprechtext am Lautsprecher emphatischer/anders sein soll als der
+        Push-Text am iPhone (z.B. 'Achtung! Wasserleck' vs. 'Wasser erkannt
+        in Waschküche'). Wird ignoriert wenn keine TTS-Empfänger im Routing.
+      example: Achtung! Wasserleck erkannt. Sofort prüfen.
+      selector:
+        text:
+          multiline: true
     severity:
       name: Severity
       description: Dringlichkeit — wird als Metadatum mitgeführt und beeinflusst den Empfänger-Payload

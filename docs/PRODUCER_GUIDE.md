@@ -300,6 +300,10 @@ data:
 
 - **`titel` wird ignoriert** — TTS-Engines kennen keinen Titel-Begriff. `message`
   ist der gesprochene Text. Ist `message` leer, wird `titel` gesprochen.
+- **Optionales `tts_message`** für abweichenden Sprechtext: wenn gesetzt, sprechen
+  TTS-Empfänger diesen Text statt `message`. Push-Empfänger sehen weiterhin
+  `message`. Damit kannst du am Lautsprecher emphatischer/menschlicher sprechen
+  als der Push am iPhone-Banner (siehe Beispiel im Routing-Block unten).
 - **`actions`, `interruption_level`, `payload.data.*` werden ignoriert** — das
   sind mobile_app-Spezifika, für TTS irrelevant.
 - **`severity` beeinflusst die Sprachausgabe nicht** — der Producer baut den
@@ -320,13 +324,16 @@ data:
   topic: wasser/leck/waschkueche
   titel: 💧 WASSERLECK!
   message: Sensor Waschküche meldet Wasser. Sofort prüfen!
+  tts_message: Achtung! Wasserleck in der Waschküche. Sofort prüfen!
   severity: kritisch
   extra_rollen:
     - voice_alle                # zusätzlich zu Topic-Default-Rollen
 ```
 
-Der `iphone_17_ul`-Empfänger bekommt eine Critical-Push, der `voice_haus`-
-Empfänger spricht den `message`-Text auf allen 6 Lautsprechern.
+Der `iphone_17_ul`-Empfänger bekommt eine Critical-Push mit dem `message`-Text
+("Sensor Waschküche meldet Wasser..."), der `voice_haus`-Empfänger spricht
+den emphatischeren `tts_message`-Text ("Achtung! Wasserleck...") auf allen 6
+Lautsprechern. Lass `tts_message` weg, wenn beide Texte identisch sein sollen.
 
 ### Hinweise
 

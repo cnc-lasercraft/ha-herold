@@ -132,6 +132,11 @@ SENDEN_SCHEMA = vol.Schema(
         vol.Required("topic"): _topic_id,
         vol.Required("titel"): cv.string,
         vol.Optional("message", default=""): cv.string,
+        # Optionaler abweichender Sprechtext nur für TTS-Empfänger.
+        # Wenn nicht gesetzt, wird `message` (oder fallback `titel`) gesprochen.
+        # Erlaubt emphatischere Formulierungen ("Achtung! Wasserleck...") auf
+        # dem Lautsprecher als am iPhone-Banner ("Wasser erkannt: ...").
+        vol.Optional("tts_message"): cv.string,
         vol.Optional("severity"): vol.In(SEVERITIES),
         vol.Optional("actions"): vol.All(cv.ensure_list, [dict]),
         vol.Optional("extra_rollen"): vol.All(cv.ensure_list, [cv.string]),
@@ -538,6 +543,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         topic_id: str = call.data["topic"]
         titel: str = call.data["titel"]
         message: str = call.data.get("message", "")
+        # Optional: abweichender Sprechtext für TTS-Empfänger.
+        tts_message: str | None = call.data.get("tts_message")
         actions: list[dict] = call.data.get("actions", [])
         extra_rollen: list[str] = call.data.get("extra_rollen", [])
         payload: dict[str, Any] = call.data.get("payload", {})
@@ -691,7 +698,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                         tts_data: dict[str, Any] = {
                             "media_player_entity_id": players[0] if len(players) == 1 else players,
                             "cache": False,
-                            "message": message or titel,
+                            # Sprechtext-Priorität:
+                            # 1. tts_message (explizit für TTS gesetzt)
+                            # 2. message (gemeinsam mit Push)
+                            # 3. titel (fallback wenn message leer)
+                            "message": tts_message or message or titel,
                         }
                         # Producer kann TTS-spezifische Optionen via
                         # payload.tts_options durchreichen (z.B. voice,
