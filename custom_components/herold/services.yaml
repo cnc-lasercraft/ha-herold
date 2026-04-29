@@ -192,16 +192,22 @@ empfaenger_setzen:
         text:
     typ:
       name: Typ
-      description: Empfänger-Typ (MVP nur notify_service)
+      description: >
+        Empfänger-Typ. notify_service = Push via notify.* (z.B. mobile_app).
+        tts = Sprachausgabe via tts.<service> auf einem Media-Player.
       required: true
       default: notify_service
       selector:
         select:
           options:
             - notify_service
+            - tts
     ziel:
       name: Ziel
-      description: Notify-Service-Entität (z.B. notify.mobile_app_iphone_17_ul)
+      description: >
+        Service-Entität ohne Domain-Prefix wenn nötig: bei
+        typ=notify_service z.B. notify.mobile_app_iphone_17_ul, bei typ=tts
+        z.B. tts.home_assistant_cloud.
       required: true
       example: notify.mobile_app_iphone_17_ul
       selector:
@@ -211,6 +217,15 @@ empfaenger_setzen:
       example: iPhone Urs
       selector:
         text:
+    media_player:
+      name: Media-Player
+      description: >
+        Nur für typ=tts — Lautsprecher-Entity auf der gesprochen wird
+        (z.B. media_player.home_assistant_voice_09f31e_media_player).
+      example: media_player.home_assistant_voice_09f31e_media_player
+      selector:
+        entity:
+          domain: media_player
 
 rolle_entfernen:
   name: Rolle entfernen

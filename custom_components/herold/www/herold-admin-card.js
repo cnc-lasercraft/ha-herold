@@ -588,12 +588,16 @@ class HeroldAdminCard extends HTMLElement {
           <label><span class="lbl-text">Typ</span>
             <select id="f-typ">
               <option value="notify_service" ${d.typ === "notify_service" ? "selected" : ""}>notify_service</option>
+              <option value="tts" ${d.typ === "tts" ? "selected" : ""}>tts</option>
             </select>
           </label>
-          <label><span class="lbl-text">Ziel</span> <span class="hint">(domain.service, z.B. notify.mobile_app_iphone_17_ul)</span>
+          <label><span class="lbl-text">Ziel</span> <span class="hint">(notify_service: notify.mobile_app_iphone_17_ul · tts: tts.home_assistant_cloud)</span>
             <input id="f-ziel" type="text" value="${d.ziel || ""}" required>
           </label>
           <label><span class="lbl-text">Name</span><input id="f-name" type="text" value="${d.name || ""}"></label>
+          <label class="tts-only" style="${d.typ === "tts" ? "" : "display:none;"}"><span class="lbl-text">Media-Player</span> <span class="hint">(nur typ=tts, Lautsprecher auf dem gesprochen wird)</span>
+            <input id="f-media-player" type="text" value="${d.media_player || ""}" placeholder="media_player.home_assistant_voice_09f31e_media_player">
+          </label>
         `;
         break;
       }
@@ -742,6 +746,14 @@ class HeroldAdminCard extends HTMLElement {
     }
     const saveBtn = sr.querySelector("[data-save]");
     if (saveBtn) saveBtn.addEventListener("click", () => this._saveCurrentEdit());
+    // Empfänger-Edit: Media-Player-Feld nur bei typ=tts zeigen
+    const typSelect = sr.querySelector("#f-typ");
+    const ttsOnly = sr.querySelector(".tts-only");
+    if (typSelect && ttsOnly) {
+      typSelect.addEventListener("change", () => {
+        ttsOnly.style.display = typSelect.value === "tts" ? "" : "none";
+      });
+    }
     const delBtn = sr.querySelector("[data-delete]");
     if (delBtn) delBtn.addEventListener("click", () => this._deleteCurrentEdit());
     const resetOvBtn = sr.querySelector("[data-reset-overrides]");
@@ -949,11 +961,17 @@ class HeroldAdminCard extends HTMLElement {
       if (!id) return this._flash("ID ist ein Pflichtfeld", true);
       const ziel = get("#f-ziel")?.value.trim() || "";
       if (!ziel.includes(".")) return this._flash("Ziel muss domain.service sein", true);
+      const typ = get("#f-typ")?.value || "notify_service";
+      const mediaPlayer = get("#f-media-player")?.value.trim() || "";
+      if (typ === "tts" && !mediaPlayer) {
+        return this._flash("Media-Player ist Pflicht für typ=tts", true);
+      }
       res = await this._callService("empfaenger_setzen", {
         empfaenger: id,
-        typ: get("#f-typ")?.value || "notify_service",
+        typ,
         ziel,
         name: get("#f-name")?.value || "",
+        media_player: mediaPlayer,
       });
     } else if (e.typ === "mapping") {
       const rollen = multi("#f-override");

@@ -24,7 +24,8 @@ SEVERITY_DEFAULT: Final = SEVERITY_INFO
 INTERRUPTION_LEVELS: Final = ("passive", "active", "time-sensitive", "critical")
 
 EMPF_TYP_NOTIFY: Final = "notify_service"
-EMPF_TYPEN: Final = (EMPF_TYP_NOTIFY,)
+EMPF_TYP_TTS: Final = "tts"
+EMPF_TYPEN: Final = (EMPF_TYP_NOTIFY, EMPF_TYP_TTS)
 
 RETENTION_EINTRAEGE_DEFAULT: Final = 2000
 RETENTION_TAGE_DEFAULT: Final = 30

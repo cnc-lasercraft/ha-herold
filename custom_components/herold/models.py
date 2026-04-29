@@ -75,6 +75,7 @@ class Empfaenger:
     typ: str
     ziel: str
     name: str = ""
+    media_player: str = ""  # nur für typ="tts": Lautsprecher auf dem ausgegeben wird
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +83,7 @@ class Empfaenger:
             "typ": self.typ,
             "ziel": self.ziel,
             "name": self.name,
+            "media_player": self.media_player,
         }
 
     @classmethod
@@ -94,6 +96,7 @@ class Empfaenger:
             typ=data["typ"],
             ziel=data["ziel"],
             name=data.get("name", ""),
+            media_player=data.get("media_player", ""),
         )
 
 

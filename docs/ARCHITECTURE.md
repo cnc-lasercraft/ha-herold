@@ -37,34 +37,21 @@ Vom Admin definiert, unabhängig von Topics und Geräten.
 | `mitglieder` | list\<Empfänger\> | siehe nächste Tabelle |
 
 ### Empfänger (physisches Ziel)
-Ein konkreter Ausspielkanal.
+Ein konkreter Ausspielkanal. Heute zwei Typen, weitere in v2+ möglich.
 
 | Feld | Typ | Beschreibung |
 |---|---|---|
 | `id` | string | eindeutig im Registry |
-| `typ` | enum | **MVP: nur `notify_service`.** v2+: `tts` / `persistent_notification` / `walldisplay` / `email` / `webhook` / … |
-| `ziel` | string | z.B. `notify.mobile_app_iphone_17_ul` |
+| `typ` | enum | `notify_service` (Push via `notify.*`) oder `tts` (Sprachausgabe via `tts.speak`). v2+: `persistent_notification` / `walldisplay` / `email` / `webhook` / … |
+| `ziel` | string | bei `notify_service`: z.B. `notify.mobile_app_iphone_17_ul`. Bei `tts`: TTS-Engine-Entity, z.B. `tts.home_assistant_cloud`. |
 | `name` | string | für UI |
-| `severity_payload` | dict | optionaler Payload-Override pro Severity (`info` / `warnung` / `kritisch`). Jeder Empfänger entscheidet selbst, wie er auf Severity reagiert (siehe Beispiel unten). |
+| `media_player` | string | nur bei `typ=tts` — Lautsprecher-Entity oder Komma-Liste mehrerer Lautsprecher (z.B. `media_player.kueche,media_player.wohnzimmer`). Bei Liste werden alle parallel angesprochen (HA `tts.speak` unterstützt Listen). |
 
-**Beispiel `severity_payload` für ein iPhone:**
-
-```yaml
-severity_payload:
-  info: {}                              # leer = nur titel/message
-  warnung:
-    data:
-      push:
-        interruption-level: time-sensitive
-  kritisch:
-    data:
-      push:
-        interruption-level: critical
-        sound:
-          critical: 1
-          name: default
-          volume: 1.0
-```
+**TTS-Empfänger-Verhalten:**
+- `titel` wird ignoriert (TTS hat keinen Titel-Begriff). `message` ist der gesprochene Text — falls leer, wird `titel` gesprochen.
+- `actions`, `interruption_level`, `payload.data.*` sind alles mobile_app-Spezifika und werden bei `typ=tts` ignoriert.
+- TTS-spezifische Optionen (z.B. Stimme, Sprache) gehen über `payload.tts_options` und werden als `options:` an `tts.speak` durchgereicht.
+- `severity` beeinflusst die Sprachausgabe nicht — der Producer baut den Sprechtext wie er will.
 
 ### Regel (Routing-Override) — **v2, nicht im MVP**
 

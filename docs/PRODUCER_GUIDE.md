@@ -258,6 +258,88 @@ solange sichtbar bleibt bis du es wegklickst.
   `actions`). Felder im `payload` haben Vorrang, außer der `senden`-Parameter
   `interruption_level` ist explizit gesetzt.
 
+## Schritt 6: Sprachausgabe (TTS) als zusätzlicher Empfänger
+
+Herold kennt zwei Empfänger-Typen: `notify_service` (Push) und `tts`
+(Sprachausgabe). Beide werden über das gleiche Routing (Topic → Rolle →
+Empfänger) angesprochen — du als Producer schickst genau eine `herold.senden`-
+Meldung, Herold verteilt sie an alle relevanten Empfänger in ihrer jeweiligen
+Form.
+
+### TTS-Empfänger anlegen
+
+**Einzelner Lautsprecher:**
+
+```yaml
+service: herold.empfaenger_setzen
+data:
+  empfaenger: voice_kueche
+  typ: tts
+  ziel: tts.home_assistant_cloud           # TTS-Engine
+  name: Voice OG Küche
+  media_player: media_player.home_assistant_voice_og_kueche_media_player
+```
+
+**Mehrere Lautsprecher gleichzeitig** (Komma-Liste — HA `tts.speak` ruft alle
+parallel an, gleicher Cache):
+
+```yaml
+service: herold.empfaenger_setzen
+data:
+  empfaenger: voice_haus
+  typ: tts
+  ziel: tts.home_assistant_cloud
+  name: Voice Haus (alle)
+  media_player: >-
+    media_player.voice_kueche,
+    media_player.voice_wohnen,
+    media_player.voice_buero
+```
+
+### Was sich für TTS unterscheidet
+
+- **`titel` wird ignoriert** — TTS-Engines kennen keinen Titel-Begriff. `message`
+  ist der gesprochene Text. Ist `message` leer, wird `titel` gesprochen.
+- **`actions`, `interruption_level`, `payload.data.*` werden ignoriert** — das
+  sind mobile_app-Spezifika, für TTS irrelevant.
+- **`severity` beeinflusst die Sprachausgabe nicht** — der Producer baut den
+  Sprechtext wie er will (z.B. selbst „Achtung!" davor schreiben bei kritisch).
+- **TTS-spezifische Optionen** (Stimme, Sprache, Geschwindigkeit) gehen über
+  `payload.tts_options` und werden als `options:` an `tts.speak` durchgereicht.
+
+### Routing-Beispiel: Push UND Sprachausgabe für ein Topic
+
+Eine Rolle wie `voice_alle` enthält den TTS-Empfänger `voice_haus`, eine Rolle
+`erwachsener` enthält den Push-Empfänger `iphone_17_ul`. Ein Wasserleck-Topic
+mit beiden Rollen löst beim Aufruf gleichzeitig Push am iPhone UND Ansage auf
+allen Lautsprechern aus:
+
+```yaml
+service: herold.senden
+data:
+  topic: wasser/leck/waschkueche
+  titel: 💧 WASSERLECK!
+  message: Sensor Waschküche meldet Wasser. Sofort prüfen!
+  severity: kritisch
+  extra_rollen:
+    - voice_alle                # zusätzlich zu Topic-Default-Rollen
+```
+
+Der `iphone_17_ul`-Empfänger bekommt eine Critical-Push, der `voice_haus`-
+Empfänger spricht den `message`-Text auf allen 6 Lautsprechern.
+
+### Hinweise
+
+- **TTS-Engine** ist die Entity (z.B. `tts.home_assistant_cloud`,
+  `tts.openai_tts`, `tts.google_en_com`). Service-Pattern intern ist immer
+  `tts.speak` mit `target.entity_id = <engine>` — Herold setzt das richtig.
+- **Cache** ist hartkodiert auf `false` (TTS-Outputs sind selten identisch).
+  Falls du Caching willst, ist das ein eigener Feature-Request.
+- **Fail-safe-Schichten** (Sanity-Check, Retry-ohne-Payload, Notbremse) gelten
+  nur für `notify_service`-Empfänger. TTS-Fehler (z.B. Lautsprecher offline)
+  laufen normal über den Service-Call-Exception-Pfad und landen als
+  `fehler:<msg>` im `ausliefer_status`.
+
 ## Topic-Namenskonvention
 
 - Format: `<bereich>/<was>[/<detail>]`

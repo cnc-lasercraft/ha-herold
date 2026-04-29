@@ -24,6 +24,7 @@ from .const import (
     CLEANUP_MINUTE,
     DOMAIN,
     EMPF_TYP_NOTIFY,
+    EMPF_TYP_TTS,
     EMPF_TYPEN,
     EVENT_CONFIG_UPDATED,
     EVENT_DELIVERY_FAILED,
@@ -172,6 +173,8 @@ EMPFAENGER_SETZEN_SCHEMA = vol.Schema(
         vol.Optional("typ", default=EMPF_TYP_NOTIFY): vol.In(EMPF_TYPEN),
         vol.Required("ziel"): cv.string,
         vol.Optional("name"): cv.string,
+        # Nur für typ="tts" relevant — Lautsprecher auf dem ausgegeben wird.
+        vol.Optional("media_player"): cv.string,
     }
 )
 
@@ -367,6 +370,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             existing.ziel = call.data["ziel"]
             if "name" in call.data:
                 existing.name = call.data["name"]
+            if "media_player" in call.data:
+                existing.media_player = call.data["media_player"]
             _LOGGER.info("Empfänger '%s' aktualisiert", empf_id)
         else:
             config_store.empfaenger[empf_id] = Empfaenger(
@@ -374,6 +379,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 typ=call.data["typ"],
                 ziel=call.data["ziel"],
                 name=call.data.get("name", empf_id),
+                media_player=call.data.get("media_player", ""),
             )
             _LOGGER.info(
                 "Empfänger '%s' erstellt: %s → %s", empf_id, call.data["typ"], call.data["ziel"]
@@ -645,6 +651,83 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     if not empf:
                         _LOGGER.warning("Empfänger '%s' nicht im Registry — übersprungen", empf_id)
                         ausliefer_status[empf_id] = "skipped:nicht_registriert"
+                        continue
+
+                    if empf.typ == EMPF_TYP_TTS:
+                        # TTS-Zustellung: message wird auf media_player
+                        # gesprochen. titel ist hier irrelevant (TTS hat keinen
+                        # Titel-Begriff) — wenn keine message gesetzt, nutzen
+                        # wir titel als Sprechtext.
+                        # Service-Pattern (HA 2023.1+): immer `tts.speak` mit
+                        # `target.entity_id = <tts-engine>`, nicht
+                        # `<tts-engine>` als Service-Name. empf.ziel ist die
+                        # Engine-Entity (z.B. tts.home_assistant_cloud).
+                        # media_player darf eine Komma-Liste sein, damit ein
+                        # Empfänger mehrere Lautsprecher gleichzeitig ansprechen
+                        # kann. tts.speak akzeptiert media_player_entity_id als
+                        # String oder Liste.
+                        players = [
+                            p.strip() for p in empf.media_player.split(",")
+                            if p.strip()
+                        ]
+                        if not players:
+                            ausliefer_status[empf_id] = "fehler:tts_ohne_media_player"
+                            _LOGGER.error(
+                                "Empfänger '%s' (typ=tts) hat keinen "
+                                "media_player konfiguriert", empf_id,
+                            )
+                            continue
+
+                        if not empf.ziel.startswith("tts."):
+                            ausliefer_status[empf_id] = (
+                                f"fehler:ungültiges_tts_ziel:{empf.ziel}"
+                            )
+                            _LOGGER.error(
+                                "Empfänger '%s': ziel '%s' ist keine "
+                                "tts.<engine> Entity", empf_id, empf.ziel,
+                            )
+                            continue
+
+                        tts_data: dict[str, Any] = {
+                            "media_player_entity_id": players[0] if len(players) == 1 else players,
+                            "cache": False,
+                            "message": message or titel,
+                        }
+                        # Producer kann TTS-spezifische Optionen via
+                        # payload.tts_options durchreichen (z.B. voice,
+                        # language). Bewusst NICHT payload.data — das ist
+                        # mobile_app-Spezifikum.
+                        if (
+                            isinstance(payload, dict)
+                            and isinstance(payload.get("tts_options"), dict)
+                        ):
+                            tts_data["options"] = payload["tts_options"]
+
+                        try:
+                            await hass.services.async_call(
+                                "tts", "speak", tts_data,
+                                target={"entity_id": empf.ziel},
+                                blocking=True,
+                            )
+                            ausliefer_status[empf_id] = "ok"
+                            _LOGGER.debug(
+                                "TTS an '%s' (%s → %s) OK",
+                                empf_id, empf.ziel, empf.media_player,
+                            )
+                        except Exception as err:  # noqa: BLE001
+                            ausliefer_status[empf_id] = f"fehler:{err}"
+                            _LOGGER.error(
+                                "TTS-Zustellung an '%s' fehlgeschlagen: %s",
+                                empf_id, err,
+                            )
+                            hass.bus.async_fire(
+                                EVENT_DELIVERY_FAILED,
+                                {
+                                    "topic": topic_id,
+                                    "empfaenger": empf_id,
+                                    "fehler": str(err),
+                                },
+                            )
                         continue
 
                     if empf.typ != EMPF_TYP_NOTIFY:
