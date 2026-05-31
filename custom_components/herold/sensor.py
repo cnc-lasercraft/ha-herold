@@ -210,7 +210,12 @@ class HeroldUnzugeordneteTopicsSensor(HeroldBaseSensor):
     _attr_native_unit_of_measurement = "Topics"
 
     def __init__(self, config_store: HeroldConfigStore) -> None:
-        super().__init__([EVENT_TOPIC_REGISTERED, EVENT_SENT])
+        # EVENT_CONFIG_UPDATED nötig, weil _unzugeordnete() effektive Werte
+        # (inkl. User-Overrides) nutzt — sonst hängt der Zähler bei
+        # Rollen-/log_only-Edits bis zur nächsten Meldung fest.
+        super().__init__(
+            [EVENT_CONFIG_UPDATED, EVENT_TOPIC_REGISTERED, EVENT_SENT]
+        )
         self._store = config_store
 
     @property
