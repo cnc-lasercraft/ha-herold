@@ -5,9 +5,12 @@ import logging
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
+from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.core import (
     HomeAssistant,
@@ -267,6 +270,21 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         "history_store": history_store,
         "save_and_notify": _save_and_notify,
     }
+
+    # Custom Cards ausliefern: das mitgelieferte www/-Verzeichnis unter /herold
+    # servieren und beide Karten automatisch ins Frontend laden. So braucht es
+    # weder eine manuelle Kopie nach <config>/www/ noch eine Lovelace-Ressource.
+    await hass.http.async_register_static_paths(
+        [
+            StaticPathConfig(
+                f"/{DOMAIN}",
+                str(Path(__file__).parent / "www"),
+                cache_headers=False,
+            )
+        ]
+    )
+    for _card in ("herold-admin-card.js", "herold-log-card.js"):
+        add_extra_js_url(hass, f"/{DOMAIN}/{_card}")
 
     # Sensor-Plattform laden
     hass.async_create_task(

@@ -1192,11 +1192,14 @@ class HeroldAdminCard extends HTMLElement {
   }
 }
 
-customElements.define("herold-admin-card", HeroldAdminCard);
-
-window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "herold-admin-card",
-  name: "Herold Admin",
-  description: "Verwaltung von Topics, Rollen, Empfängern und Mapping",
-});
+// Doppelte Registrierung abfangen: die Integration liefert die Karte selbst aus,
+// eine zusätzlich von Hand eingetragene /local/-Ressource würde sonst hier werfen.
+if (!customElements.get("herold-admin-card")) {
+  customElements.define("herold-admin-card", HeroldAdminCard);
+  window.customCards = window.customCards || [];
+  window.customCards.push({
+    type: "herold-admin-card",
+    name: "Herold Admin",
+    description: "Verwaltung von Topics, Rollen, Empfängern und Mapping",
+  });
+}

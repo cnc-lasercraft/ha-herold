@@ -397,12 +397,16 @@ class HeroldLogCard extends HTMLElement {
   }
 }
 
-customElements.define("herold-log-card", HeroldLogCard);
-window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "herold-log-card",
-  name: "Herold Log",
-  description:
-    "Zentrales Herold-Log mit Filter- und Suchmöglichkeiten. " +
-    "Producer-Views: topic/severity vorbelegen, lock_filters: true blendet die Filter-Bar aus.",
-});
+// Doppelte Registrierung abfangen: die Integration liefert die Karte selbst aus,
+// eine zusätzlich von Hand eingetragene /local/-Ressource würde sonst hier werfen.
+if (!customElements.get("herold-log-card")) {
+  customElements.define("herold-log-card", HeroldLogCard);
+  window.customCards = window.customCards || [];
+  window.customCards.push({
+    type: "herold-log-card",
+    name: "Herold Log",
+    description:
+      "Zentrales Herold-Log mit Filter- und Suchmöglichkeiten. " +
+      "Producer-Views: topic/severity vorbelegen, lock_filters: true blendet die Filter-Bar aus.",
+  });
+}
