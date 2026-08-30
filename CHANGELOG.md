@@ -4,6 +4,31 @@ Alle nennenswerten Änderungen an diesem Projekt.
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.0.1] — 2026-08-30
+
+Fehlerbehebungen an der Admin-Card und an der Auslieferung der Custom Cards.
+
+### Behoben
+
+- **Admin-Card zeigte keine wirksamen Rollen.** Die Topics-Tabelle las das
+  Rollen-Mapping noch im flachen Format aus der Zeit vor dem Override-Layer.
+  Der Mapping-Sensor liefert pro Feld ein Tripel
+  (`producer_default` / `override` / `wirksam`), weshalb jedes Topic
+  „— keine —" anzeigte, die Override-Einfärbung der Chips nie griff und der
+  Zähler am Mapping-Tab alle Topics statt nur der übersteuerten zählte.
+- **Karten-Updates erreichten den Browser nicht.** Die von der Integration
+  ausgelieferten Custom Cards wurden trotz `cache_headers=False` heuristisch
+  gecacht — nach einem Update lief weiter die alte Karte, ohne Fehlermeldung.
+  `add_extra_js_url` hängt die Manifest-Version nun als Query an
+  (`/herold/<card>.js?v=<version>`), sodass jeder Release den Cache selbst
+  bricht.
+
+### Hinweise zum Update
+
+- Der Cache-Bust greift ab dieser Version. Wer noch die Karte aus 1.0.0 im
+  Browser hat, braucht einmalig einen harten Reload (bzw. geleerten App-Cache
+  auf Wall-Displays und Kiosk-Browsern); danach genügt ein normaler Reload.
+
 ## [1.0.0] — 2026-08-29
 
 Erster öffentlicher Release. Der Code läuft seit dem 2026-04-17 im
