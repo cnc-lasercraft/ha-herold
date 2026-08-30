@@ -219,6 +219,16 @@ class HeroldAdminCard extends HTMLElement {
     `;
   }
 
+  // Mapping-Sensor liefert pro Feld ein Tripel {producer_default, override, wirksam}.
+  // Ein Topic gilt als übersteuert, sobald eines der Felder einen Override trägt
+  // — gleiche Zählweise wie der State von sensor.herold_topic_mapping.
+  _hatOverride(m) {
+    if (!m) return false;
+    return ["rollen", "log_only", "interruption_level", "default_severity"].some(
+      (feld) => (m[feld]?.override ?? null) !== null
+    );
+  }
+
   _tabCount(tabId) {
     switch (tabId) {
       case "topics":
@@ -228,7 +238,7 @@ class HeroldAdminCard extends HTMLElement {
       case "empfaenger":
         return this._empfaenger().length;
       case "mapping":
-        return this._mapping().filter((m) => m.override !== null).length;
+        return this._mapping().filter((m) => this._hatOverride(m)).length;
       case "einstellungen":
         return "";
     }
@@ -258,8 +268,8 @@ class HeroldAdminCard extends HTMLElement {
     const rows = topics
       .map((t) => {
         const m = mapping.get(t.id);
-        const wirksam = m?.wirksam || [];
-        const hasOverride = m?.override !== null && m?.override !== undefined;
+        const wirksam = m?.wirksam_rollen || m?.rollen?.wirksam || [];
+        const hasOverride = (m?.rollen?.override ?? null) !== null;
         const rollenHtml = wirksam.length
           ? wirksam
               .map(

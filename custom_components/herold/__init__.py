@@ -19,6 +19,7 @@ from homeassistant.core import (
     SupportsResponse,
 )
 from homeassistant.helpers import config_validation as cv, discovery
+from homeassistant.loader import async_get_integration
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.typing import ConfigType
 
@@ -283,8 +284,15 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             )
         ]
     )
+    # Versions-Query hängt an beiden Karten-URLs: der Static-Path setzt zwar
+    # keine Cache-Header, Browser cachen die Module aber trotzdem heuristisch
+    # und zeigen nach einem Update weiter die alte Karte. Mit ?v=<manifest-
+    # version> ändert sich die URL bei jedem Release und der Cache bricht von
+    # selbst — ohne dass der Nutzer hart neu laden muss.
+    _integration = await async_get_integration(hass, DOMAIN)
+    _version = str(_integration.version or "0")
     for _card in ("herold-admin-card.js", "herold-log-card.js"):
-        add_extra_js_url(hass, f"/{DOMAIN}/{_card}")
+        add_extra_js_url(hass, f"/{DOMAIN}/{_card}?v={_version}")
 
     # Sensor-Plattform laden
     hass.async_create_task(
