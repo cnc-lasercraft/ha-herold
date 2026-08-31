@@ -4,6 +4,26 @@ Alle nennenswerten Änderungen an diesem Projekt.
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.0.2] — 2026-08-31
+
+Behebt den sporadischen „Konfigurationsfehler" der Custom Cards.
+
+### Behoben
+
+- **Karten meldeten sporadisch „Konfigurationsfehler".** Home Assistant
+  installiert mit `app.js` den scoped-custom-element-registry-Polyfill, der
+  `customElements` durch eine eigene Registry-Map ersetzt. Die von der
+  Integration per `add_extra_js_url` ausgelieferten Karten wurden je nach
+  Netzwerk-Timing schon *vor* `app.js` ausgeführt und definierten ihr Element
+  damit nur in der nativen Registry — für das `customElements.get()`, mit dem
+  Lovelace eine Karte auflöst, blieb es unsichtbar. Belegt im Produktivsystem:
+  `customElements.get("herold-log-card")` lieferte `undefined`, während
+  `document.createElement("herold-log-card")` sauber zu `HeroldLogCard`
+  upgradete. Beide Karten registrieren sich jetzt erst nach dem `load`-Event,
+  wenn der Polyfill steht. Der bisherige Guard `if (!customElements.get(...))`
+  konnte das nicht abfangen, weil er dieselbe unzuverlässige Funktion befragte;
+  er ist durch ein `try`/`catch` um `define()` ersetzt.
+
 ## [1.0.1] — 2026-08-30
 
 Fehlerbehebungen an der Admin-Card und an der Auslieferung der Custom Cards.

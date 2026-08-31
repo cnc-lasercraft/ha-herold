@@ -1202,14 +1202,28 @@ class HeroldAdminCard extends HTMLElement {
   }
 }
 
-// Doppelte Registrierung abfangen: die Integration liefert die Karte selbst aus,
-// eine zusätzlich von Hand eingetragene /local/-Ressource würde sonst hier werfen.
-if (!customElements.get("herold-admin-card")) {
-  customElements.define("herold-admin-card", HeroldAdminCard);
+// Registrierung erst nach dem Laden des Frontends: HA installiert mit app.js den
+// scoped-custom-element-registry-Polyfill, der customElements durch eine eigene Map
+// ersetzt. Wer sich VOR app.js definiert, landet nur in der nativen Registry und ist
+// für das customElements.get() von Lovelace unsichtbar -> "Konfigurationsfehler".
+// try/catch bleibt als Netz gegen doppeltes Laden (z.B. zusätzliche /local/-Ressource).
+function heroldAdminCardRegistrieren() {
+  if (customElements.get("herold-admin-card")) return;
+  try {
+    customElements.define("herold-admin-card", HeroldAdminCard);
+  } catch (e) {
+    return;
+  }
   window.customCards = window.customCards || [];
   window.customCards.push({
     type: "herold-admin-card",
     name: "Herold Admin",
     description: "Verwaltung von Topics, Rollen, Empfängern und Mapping",
   });
+}
+
+if (document.readyState === "complete") {
+  heroldAdminCardRegistrieren();
+} else {
+  window.addEventListener("load", heroldAdminCardRegistrieren, { once: true });
 }

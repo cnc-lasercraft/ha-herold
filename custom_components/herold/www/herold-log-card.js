@@ -397,10 +397,18 @@ class HeroldLogCard extends HTMLElement {
   }
 }
 
-// Doppelte Registrierung abfangen: die Integration liefert die Karte selbst aus,
-// eine zusätzlich von Hand eingetragene /local/-Ressource würde sonst hier werfen.
-if (!customElements.get("herold-log-card")) {
-  customElements.define("herold-log-card", HeroldLogCard);
+// Registrierung erst nach dem Laden des Frontends: HA installiert mit app.js den
+// scoped-custom-element-registry-Polyfill, der customElements durch eine eigene Map
+// ersetzt. Wer sich VOR app.js definiert, landet nur in der nativen Registry und ist
+// für das customElements.get() von Lovelace unsichtbar -> "Konfigurationsfehler".
+// try/catch bleibt als Netz gegen doppeltes Laden (z.B. zusätzliche /local/-Ressource).
+function heroldLogCardRegistrieren() {
+  if (customElements.get("herold-log-card")) return;
+  try {
+    customElements.define("herold-log-card", HeroldLogCard);
+  } catch (e) {
+    return;
+  }
   window.customCards = window.customCards || [];
   window.customCards.push({
     type: "herold-log-card",
@@ -409,4 +417,10 @@ if (!customElements.get("herold-log-card")) {
       "Zentrales Herold-Log mit Filter- und Suchmöglichkeiten. " +
       "Producer-Views: topic/severity vorbelegen, lock_filters: true blendet die Filter-Bar aus.",
   });
+}
+
+if (document.readyState === "complete") {
+  heroldLogCardRegistrieren();
+} else {
+  window.addEventListener("load", heroldLogCardRegistrieren, { once: true });
 }
