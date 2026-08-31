@@ -52,6 +52,7 @@ from .const import (
     SEVERITY_DEFAULT,
     TOPIC_REGEX,
 )
+from .api import register_views
 from .models import Empfaenger, HistoryEintrag, Rolle, Topic
 from .store import HeroldConfigStore, HeroldHistoryStore
 
@@ -271,6 +272,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         "history_store": history_store,
         "save_and_notify": _save_and_notify,
     }
+
+    # Lesende REST-API unter /api/herold/… — für Oberflächen ausserhalb von HA
+    # (Kommandozentrale) und als saubere Alternative zum Abgreifen von
+    # Sensor-Attributen. Schreiben läuft weiterhin nur über die Services.
+    register_views(hass)
 
     # Custom Cards ausliefern: das mitgelieferte www/-Verzeichnis unter /herold
     # servieren und beide Karten automatisch ins Frontend laden. So braucht es

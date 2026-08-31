@@ -105,6 +105,96 @@ class HeroldConfigStore:
         topic = self.topics.get(topic_id)
         return (list(topic.default_rollen) if topic else []), False
 
+    # ---- Kombinierte Topic-Ansicht (Producer-Default + Override + Effektiv) ----
+    #
+    # EINE Quelle für die Zusammenführung der beiden Konfigurationsebenen.
+    # Sensoren, REST-API und Karten lesen alle hierher — vorher lag dieselbe
+    # Logik im Mapping-Sensor UND im Card-JavaScript, was zwangsläufig
+    # auseinanderlief (Admin-Card zeigte 2026-08-30 bei jedem Topic
+    # „— keine —", weil das JS die flache Vor-Override-Struktur erwartete).
+
+    def _tripel(self, topic_id: str, feld: str, producer_value: Any) -> dict[str, Any]:
+        """{producer_default, override, wirksam} für ein überschreibbares Feld."""
+        overrides = self.topic_overrides.get(topic_id, {})
+        if feld in overrides:
+            return {
+                "producer_default": producer_value,
+                "override": overrides[feld],
+                "wirksam": overrides[feld],
+            }
+        return {
+            "producer_default": producer_value,
+            "override": None,
+            "wirksam": producer_value,
+        }
+
+    def hat_override(self, topic_id: str) -> bool:
+        """True, wenn der User an diesem Topic irgendetwas übersteuert hat."""
+        return bool(
+            topic_id in self.topic_rolle_mapping
+            or self.topic_overrides.get(topic_id)
+        )
+
+    def ist_unzugeordnet(self, topic_id: str) -> bool:
+        """Topic ohne wirksame Rolle, das trotzdem zugestellt werden will.
+
+        `log_only`-Topics zählen nicht — die sollen bewusst niemanden erreichen.
+        """
+        return not self.effective_log_only(topic_id) and not (
+            self.effective_default_rollen(topic_id)[0]
+        )
+
+    def topic_ansicht(self, topic_id: str) -> dict[str, Any]:
+        """Vollbild eines Topics: Stammdaten, beide Ebenen, Effektivwerte."""
+        topic = self.topics.get(topic_id)
+        if topic is None:
+            return {}
+
+        rollen_override = self.topic_rolle_mapping.get(topic_id)
+        rollen = (
+            {
+                "producer_default": list(topic.default_rollen),
+                "override": list(rollen_override),
+                "wirksam": list(rollen_override),
+            }
+            if rollen_override is not None
+            else {
+                "producer_default": list(topic.default_rollen),
+                "override": None,
+                "wirksam": list(topic.default_rollen),
+            }
+        )
+        log_only = self._tripel(topic_id, "log_only", bool(topic.log_only))
+        interruption = self._tripel(
+            topic_id, "interruption_level", topic.interruption_level
+        )
+        severity = self._tripel(topic_id, "default_severity", topic.default_severity)
+
+        return {
+            "id": topic.id,
+            "name": topic.name,
+            "beschreibung": topic.beschreibung,
+            "quelle": topic.quelle,
+            "explizit_registriert": topic.explizit_registriert,
+            "rollen": rollen,
+            "log_only": log_only,
+            "interruption_level": interruption,
+            "default_severity": severity,
+            "hat_override": self.hat_override(topic_id),
+            "unzugeordnet": self.ist_unzugeordnet(topic_id),
+            # Kurzform für Konsumenten, die nur den Effektivwert brauchen.
+            "wirksam": {
+                "rollen": rollen["wirksam"],
+                "log_only": log_only["wirksam"],
+                "interruption_level": interruption["wirksam"],
+                "default_severity": severity["wirksam"],
+            },
+        }
+
+    def topic_ansichten(self) -> list[dict[str, Any]]:
+        """Alle Topics als kombinierte Ansicht, nach ID sortiert."""
+        return [self.topic_ansicht(tid) for tid in sorted(self.topics)]
+
     async def async_save(self) -> None:
         data = {
             "topics": {tid: t.to_dict() for tid, t in self.topics.items()},

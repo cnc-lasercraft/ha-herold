@@ -278,15 +278,22 @@ class HeroldAdminCard extends HTMLElement {
               )
               .join("")
           : `<span class="chip warn">— keine —</span>`;
+        // Effektivwerte (inkl. User-Override) anzeigen, nicht die Producer-Defaults
+        // — sonst steht in derselben Zeile ein wirksames Rollen-Chip neben einem
+        // Flag, das den Override ignoriert. Fallback auf die alten Felder, damit
+        // die Karte auch gegen eine ältere Integration noch etwas anzeigt.
+        const eLogOnly = t.wirksam_log_only ?? t.log_only;
+        const eLevel = t.wirksam_interruption_level ?? t.interruption_level;
         const flags = [];
-        if (t.log_only) flags.push(`<span class="chip">🔇 log</span>`);
-        if (t.interruption_level)
-          flags.push(`<span class="chip override" title="iOS Interruption-Level">🔔 ${t.interruption_level}</span>`);
+        if (eLogOnly) flags.push(`<span class="chip">🔇 log</span>`);
+        if (eLevel)
+          flags.push(`<span class="chip override" title="iOS Interruption-Level">🔔 ${eLevel}</span>`);
+        const eSeverity = t.wirksam_severity ?? t.severity;
         return `
           <tr data-edit-topic="${t.id}">
             <td class="mono">${t.id}</td>
             <td>${t.name || "—"}</td>
-            <td><span class="sev sev-${t.severity}">${t.severity}</span></td>
+            <td><span class="sev sev-${eSeverity}">${eSeverity}</span></td>
             <td>${flags.join(" ") || ""}</td>
             <td>${rollenHtml}</td>
           </tr>`;
@@ -627,11 +634,14 @@ class HeroldAdminCard extends HTMLElement {
         // Topic-Eigenschaften als Read-Only-Info anzeigen
         const t = this._topics().find((x) => x.id === d.id);
         const topicFlags = [];
-        if (t?.severity)
-          topicFlags.push(`<span class="sev sev-${t.severity}">${t.severity}</span>`);
-        if (t?.log_only) topicFlags.push(`<span class="chip">🔇 log_only</span>`);
-        if (t?.interruption_level)
-          topicFlags.push(`<span class="chip override">🔔 ${t.interruption_level}</span>`);
+        const tSeverity = t?.wirksam_severity ?? t?.severity;
+        const tLogOnly = t?.wirksam_log_only ?? t?.log_only;
+        const tLevel = t?.wirksam_interruption_level ?? t?.interruption_level;
+        if (tSeverity)
+          topicFlags.push(`<span class="sev sev-${tSeverity}">${tSeverity}</span>`);
+        if (tLogOnly) topicFlags.push(`<span class="chip">🔇 log_only</span>`);
+        if (tLevel)
+          topicFlags.push(`<span class="chip override">🔔 ${tLevel}</span>`);
         const flagsHtml = topicFlags.length
           ? topicFlags.join(" ")
           : '<span class="dim">—</span>';

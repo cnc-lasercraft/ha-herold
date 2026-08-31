@@ -4,6 +4,40 @@ Alle nennenswerten Änderungen an diesem Projekt.
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.1.0] — 2026-08-31
+
+Lesende REST-API und eine einzige Quelle für Effektivwerte.
+
+### Neu
+
+- **REST-API unter `/api/herold/…`** (`config`, `topics`, `topics/<id>`, `rollen`,
+  `empfaenger`, `einstellungen`, `history`) für Oberflächen ausserhalb von Home
+  Assistant. Lesend, token-authentisiert; geschrieben wird weiterhin nur über die
+  `herold.*`-Services. Sensor-Attribute sind als Transportmittel ungeeignet — sie
+  werden bei jeder Änderung an alle Clients gepusht und zwangen bisher jeden
+  Konsumenten, Producer-Default und User-Override selbst zusammenzuführen.
+  `history` liefert einen `cursor` für pollende Clients.
+- **`sensor.herold_aktive_topics`** trägt zusätzlich `wirksam_severity`,
+  `wirksam_log_only`, `wirksam_interruption_level` und `hat_override`. Die
+  bisherigen Felder bleiben unverändert (Producer-Defaults).
+
+### Geändert
+
+- **Producer-Default und Override werden nur noch an einer Stelle zusammengeführt**
+  (`HeroldConfigStore.topic_ansicht()`). Mapping-Sensor, Unzugeordnet-Sensor und
+  REST-API speisen daraus. Vorher lag dieselbe Logik im Sensor und noch einmal im
+  Card-JavaScript — die Ursache des Anzeigefehlers von v1.0.1.
+
+### Behoben
+
+- **Admin-Card zeigte in „Severity" und „Flags" Producer-Defaults** neben wirksamen
+  Rollen in derselben Zeile: ein per Override stillgelegtes Topic erschien ohne
+  `log`-Flag, ein übersteuertes `interruption_level` gar nicht. Die Karte liest
+  diese Spalten jetzt aus den `wirksam_*`-Feldern.
+- **`sensor.herold_aktive_topics` abonniert `EVENT_CONFIG_UPDATED`** — ohne das
+  wären die neuen Effektivwerte bei Override-Edits eingefroren, bis zufällig eine
+  Meldung durchläuft (derselbe Fehler wie 2026-05-31 beim Unzugeordnet-Sensor).
+
 ## [1.0.2] — 2026-08-31
 
 Behebt den sporadischen „Konfigurationsfehler" der Custom Cards.

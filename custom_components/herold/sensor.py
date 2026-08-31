@@ -177,7 +177,11 @@ class HeroldAktiveTopicsSensor(HeroldBaseSensor):
     _attr_native_unit_of_measurement = "Topics"
 
     def __init__(self, config_store: HeroldConfigStore) -> None:
-        super().__init__([EVENT_TOPIC_REGISTERED, EVENT_SENT])
+        # EVENT_CONFIG_UPDATED nötig, seit die Attribute auch `wirksam_*`-Felder
+        # tragen: ohne das hinge der Effektivwert bei Override-Edits fest, bis
+        # zufällig eine Meldung durchläuft (derselbe Fehler wie 2026-05-31 beim
+        # Unzugeordnet-Sensor).
+        super().__init__([EVENT_CONFIG_UPDATED, EVENT_TOPIC_REGISTERED, EVENT_SENT])
         self._store = config_store
 
     @property
@@ -186,6 +190,11 @@ class HeroldAktiveTopicsSensor(HeroldBaseSensor):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        # `severity`/`log_only`/`interruption_level` sind die Producer-Defaults
+        # und bleiben aus Kompatibilitätsgründen unverändert. Die `wirksam_*`-
+        # Felder tragen den Effektivwert inkl. User-Override — Oberflächen, die
+        # den Ist-Zustand zeigen, müssen diese lesen (die Admin-Card zeigte bis
+        # 2026-08-31 in „Flags"/„Severity" Producer-Werte neben wirksamen Rollen).
         return {
             "topics": [
                 {
@@ -195,6 +204,12 @@ class HeroldAktiveTopicsSensor(HeroldBaseSensor):
                     "explizit": t.explizit_registriert,
                     "log_only": t.log_only,
                     "interruption_level": t.interruption_level,
+                    "wirksam_severity": self._store.effective_default_severity(t.id),
+                    "wirksam_log_only": self._store.effective_log_only(t.id),
+                    "wirksam_interruption_level": (
+                        self._store.effective_interruption_level(t.id)
+                    ),
+                    "hat_override": self._store.hat_override(t.id),
                 }
                 for t in self._store.topics.values()
             ]
@@ -227,14 +242,9 @@ class HeroldUnzugeordneteTopicsSensor(HeroldBaseSensor):
         return {"topics": self._unzugeordnete()}
 
     def _unzugeordnete(self) -> list[str]:
-        # Effektive Werte berücksichtigen, damit User-Override (z.B. log_only=true)
-        # ein bisheriges "unzugeordnetes" Topic auch wirklich aus der Liste nimmt.
-        return [
-            tid
-            for tid in self._store.topics
-            if not self._store.effective_log_only(tid)
-            and not self._store.effective_default_rollen(tid)[0]
-        ]
+        # Definition liegt im Store (`ist_unzugeordnet`), damit Sensor und
+        # REST-API dieselbe Antwort geben.
+        return [tid for tid in self._store.topics if self._store.ist_unzugeordnet(tid)]
 
 
 # ---------------------------------------------------------------------------
@@ -333,56 +343,21 @@ class HeroldMappingSensor(HeroldBaseSensor):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        eintraege = []
-        for tid, topic in sorted(self._store.topics.items()):
-            overrides = self._store.topic_overrides.get(tid, {})
-            rollen_override = self._store.topic_rolle_mapping.get(tid)
-
-            def _tripel(feld: str, producer_value: Any) -> dict[str, Any]:
-                if feld in overrides:
-                    return {
-                        "producer_default": producer_value,
-                        "override": overrides[feld],
-                        "wirksam": overrides[feld],
-                    }
-                return {
-                    "producer_default": producer_value,
-                    "override": None,
-                    "wirksam": producer_value,
-                }
-
-            rollen_tripel = (
-                {
-                    "producer_default": list(topic.default_rollen),
-                    "override": list(rollen_override),
-                    "wirksam": list(rollen_override),
-                }
-                if rollen_override is not None
-                else {
-                    "producer_default": list(topic.default_rollen),
-                    "override": None,
-                    "wirksam": list(topic.default_rollen),
-                }
-            )
-
-            eintraege.append(
-                {
-                    "topic": tid,
-                    "rollen": rollen_tripel,
-                    "log_only": _tripel("log_only", bool(topic.log_only)),
-                    "interruption_level": _tripel(
-                        "interruption_level", topic.interruption_level
-                    ),
-                    "default_severity": _tripel(
-                        "default_severity", topic.default_severity
-                    ),
-                    # Convenience-Felder (für Cards die nur den effektiven Wert wollen)
-                    "wirksam_rollen": rollen_tripel["wirksam"],
-                    "wirksam_log_only": _tripel("log_only", bool(topic.log_only))[
-                        "wirksam"
-                    ],
-                }
-            )
+        # Die Zusammenführung Producer-Default/Override liegt im Store
+        # (`topic_ansicht`) — hier wird nur noch auf das Sensor-Schema gemappt.
+        eintraege = [
+            {
+                "topic": a["id"],
+                "rollen": a["rollen"],
+                "log_only": a["log_only"],
+                "interruption_level": a["interruption_level"],
+                "default_severity": a["default_severity"],
+                # Convenience-Felder (für Cards die nur den effektiven Wert wollen)
+                "wirksam_rollen": a["wirksam"]["rollen"],
+                "wirksam_log_only": a["wirksam"]["log_only"],
+            }
+            for a in self._store.topic_ansichten()
+        ]
         return {"mapping": eintraege}
 
 

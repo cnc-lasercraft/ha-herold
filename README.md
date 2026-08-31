@@ -83,6 +83,43 @@ Die Admin-Card erwartet keine `entity`-Parameter — sie liest aus `sensor.herol
 | `herold.history_abfragen` | Meldungs-History gefiltert abrufen |
 | `herold.history_aufraeumen` | Manueller Retention-Cleanup |
 
+## REST-API (lesend)
+
+Für Oberflächen ausserhalb von Home Assistant. Alle Endpunkte verlangen ein
+HA-Token (`Authorization: Bearer …`) und sind rein lesend — geschrieben wird
+weiterhin ausschliesslich über die `herold.*`-Services, damit ein externer
+Client Fernbedienung bleibt und nie zweite Wahrheit wird.
+
+| Endpunkt | Inhalt |
+|---|---|
+| `GET /api/herold/config` | Topics, Rollen, Empfänger, Einstellungen in einem Roundtrip |
+| `GET /api/herold/topics` | Topics; Filter `?unzugeordnet=1`, `?override=1`, `?praefix=pool/` |
+| `GET /api/herold/topics/<id>` | Einzelnes Topic (ID darf Slashes enthalten) |
+| `GET /api/herold/rollen` | Rollen inkl. Mitglieder und Anzahl adressierter Topics |
+| `GET /api/herold/empfaenger` | Empfänger inkl. Typ, Ziel und zugehöriger Rollen |
+| `GET /api/herold/einstellungen` | Fallback-Rolle, Retention, Kennzahlen |
+| `GET /api/herold/history` | Log; Filter `topic`, `severity`, `rolle`, `von`/`bis`, `seit`, `zugestellt`, `limit` |
+
+Jedes Topic trägt beide Konfigurationsebenen **und** den Effektivwert im selben
+Objekt — Konsumenten müssen Producer-Default und User-Override nicht selbst
+zusammenführen:
+
+```json
+{
+  "id": "pool/tank_leer_notaus",
+  "rollen":     { "producer_default": ["techn_support"], "override": null,  "wirksam": ["techn_support"] },
+  "log_only":   { "producer_default": false, "override": null, "wirksam": false },
+  "hat_override": false,
+  "unzugeordnet": false,
+  "wirksam": { "rollen": ["techn_support"], "log_only": false,
+               "interruption_level": "critical", "default_severity": "kritisch" }
+}
+```
+
+`GET /api/herold/history` liefert zusätzlich `cursor` (Zeitstempel des jüngsten
+Eintrags). Wer ihn beim nächsten Aufruf als `?seit=` zurückgibt, bekommt nur
+Neues — gedacht für pollende Clients.
+
 ## Warum nicht bestehende Lösungen
 
 Siehe [`docs/ALTERNATIVES.md`](docs/ALTERNATIVES.md). Kurzfassung:
