@@ -531,8 +531,9 @@ Damit das Filtern via `pool/*` sauber funktioniert, muss jeder Producer ein **ei
 | Wallbox/Ladeplanung | `wallbox/*` | `ev-fahrzeuge` | `/ev-fahrzeuge/wallbox-log` |
 | EKZ Tariff | `ekz_tariff/*` | `ekz-tariff` | `/ekz-tariff/log` |
 | Tariff Saver | `tariff_saver/*` | `tariff-saver-price-curve-15-min` | `/tariff-saver-price-curve-15-min/log` |
+| uniali | `uniali/*` | `uniali-audit` | `/uniali-audit/log` |
 
-**Kandidaten für später:** `uniali/*` (Dashboard `uniali-audit` — Herold-Anbindung steht noch aus), `backup/*`, `miele/*`, `garage/*`, `licht/*` etc.
+**Kandidaten für später:** `backup/*`, `miele/*`, `garage/*`, `licht/*` etc.
 
 ### Rezept: Neue Producer-Log-View nachbauen
 
