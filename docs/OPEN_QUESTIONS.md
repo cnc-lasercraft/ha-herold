@@ -144,6 +144,24 @@ Kein "Default-Payload pro Empfänger-Typ" im MVP — jeder Empfänger pflegt sei
 - Privacy-Redigierung nach N Tagen.
 - Migration-Blueprint für bestehende Automationen.
 
+### Stand der v2-Liste (2026-09-01)
+
+Nach fünf Monaten Produktivbetrieb ist von dieser Liste das meiste entweder gebaut
+oder anderswo aufgehoben — sie wird deshalb **nicht mehr als offene Pendenz geführt**:
+
+- **Gebaut:** eigene Lovelace-Cards (Log + Admin, seit v1.0.0 von der Integration
+  ausgeliefert), Empfänger-Typ `tts` (2026-04-29).
+- **Im Zielbild Kommandozentrale aufgehoben:** Empfänger-Typ `webhook` (Schritt 3) und
+  Acknowledge/Lifecycle (Schritt 5) — siehe `CLAUDE.md`, geführt am Projekt `zentrale`.
+- **Bewusst zurückgestellt — Regel-Matrix und Zeit-/Presence-Filter.** Die Topic-Triage
+  ist zweimal durch den gesamten Bestand gelaufen (2026-05-31 und 2026-08-31, inzwischen
+  102 Topics) und liess sich jedes Mal vollständig mit **Per-Topic-Overrides** lösen:
+  Rollen, `severity`, `interruption_level`, `log_only`. Kein einziger Fall verlangte
+  „nachts anders routen" oder presence-abhängige Empfänger; selbst der Fokus-Modus-Fall
+  (`ekz_tariff/retries_exhausted` ging im Fokus unter) war ein `time-sensitive`-Override,
+  keine Regel. Die Regel-Matrix bleibt damit eine schlafende Option — sie wird gebaut,
+  wenn ein realer Fall sie erzwingt, nicht auf Vorrat.
+
 ---
 
 ## 9. Topic-Namensschema
