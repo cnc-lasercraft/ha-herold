@@ -72,12 +72,13 @@
       },
       "empfaenger_edit": {
         "title": "Recipient {modus} — {empfaenger_id}",
-        "description": "Target = notify service (e.g. notify.mobile_app_iphone_17_ul). Deleting removes the recipient from all roles.",
+        "description": "Target = notify service (e.g. notify.mobile_app_iphone_17_ul); for type tts the TTS engine (e.g. tts.home_assistant_cloud) — at least one media player is then required. Deleting removes the recipient from all roles.",
         "data": {
           "id": "Recipient ID",
           "typ": "Type",
-          "ziel": "Target (domain.service, e.g. notify.mobile_app_xxx)",
+          "ziel": "Target (domain.service, e.g. notify.mobile_app_xxx or tts.home_assistant_cloud)",
           "name": "Display name",
+          "media_player": "Media player (type tts only — speakers the message is spoken on)",
           "_loeschen": "⚠️ Delete this recipient"
         }
       },
@@ -113,6 +114,7 @@
       "rolle_exists": "Role already exists",
       "empfaenger_exists": "Recipient already exists",
       "invalid_ziel": "Invalid target — expected domain.service (e.g. notify.mobile_app_xxx)",
+      "media_player_required": "Type tts needs at least one media player",
       "rolle_unbekannt": "Role is not registered"
     },
     "abort": {

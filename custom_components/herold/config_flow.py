@@ -19,6 +19,8 @@ from homeassistant.config_entries import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import (
     BooleanSelector,
+    EntitySelector,
+    EntitySelectorConfig,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
@@ -31,6 +33,7 @@ from homeassistant.helpers.selector import (
 from .const import (
     DOMAIN,
     EMPF_TYP_NOTIFY,
+    EMPF_TYP_TTS,
     EMPF_TYPEN,
     INTERRUPTION_LEVELS,
     SEVERITIES,
@@ -483,17 +486,24 @@ class HeroldOptionsFlow(OptionsFlow):
             if not ziel or "." not in ziel:
                 errors["ziel"] = "invalid_ziel"
 
+            typ = user_input.get("typ", EMPF_TYP_NOTIFY)
+            # Der Selector liefert eine Liste, gespeichert wird wie beim Service
+            # `empfaenger_setzen` eine Komma-Liste (ein Empfänger darf mehrere
+            # Lautsprecher ansprechen).
+            media_player = ",".join(user_input.get("media_player") or [])
+            # Ohne Lautsprecher überspringt `_handle_senden` den Empfänger mit
+            # `fehler:tts_ohne_media_player` — also gar nicht erst speichern.
+            if typ == EMPF_TYP_TTS and not media_player:
+                errors["media_player"] = "media_player_required"
+
             if not errors:
                 if is_new:
-                    empf = Empfaenger(
-                        id=eid,
-                        typ=user_input.get("typ", EMPF_TYP_NOTIFY),
-                        ziel=ziel,
-                    )
+                    empf = Empfaenger(id=eid, typ=typ, ziel=ziel)
                     store.empfaenger[eid] = empf
                 assert empf is not None
-                empf.typ = user_input.get("typ", EMPF_TYP_NOTIFY)
+                empf.typ = typ
                 empf.ziel = ziel
+                empf.media_player = media_player
                 empf.name = user_input.get("name", "") or eid
                 await self._save()
                 return self.async_create_entry(title="", data={})
@@ -502,6 +512,16 @@ class HeroldOptionsFlow(OptionsFlow):
             if user_input is not None and key in user_input:
                 return user_input[key]
             return getattr(empf, key) if empf else default
+
+        # Gespeicherte Komma-Liste → Liste für den Entity-Selector.
+        if user_input is not None:
+            media_player_vorgabe = list(user_input.get("media_player") or [])
+        else:
+            media_player_vorgabe = [
+                p.strip()
+                for p in (empf.media_player if empf else "").split(",")
+                if p.strip()
+            ]
 
         schema_dict: dict[Any, Any] = {}
         if is_new:
@@ -522,6 +542,16 @@ class HeroldOptionsFlow(OptionsFlow):
         schema_dict[vol.Optional("name", default=_last("name", ""))] = TextSelector(
             TextSelectorConfig(type=TextSelectorType.TEXT)
         )
+        # Pflicht bei typ=tts (oben geprüft). Das Formular kann Felder nicht
+        # abhängig vom Typ ein-/ausblenden, deshalb optional im Schema.
+        # `suggested_value` statt `default`: ein geleertes Feld soll leer
+        # ankommen und nicht wieder mit dem alten Wert aufgefüllt werden.
+        schema_dict[
+            vol.Optional(
+                "media_player",
+                description={"suggested_value": media_player_vorgabe},
+            )
+        ] = EntitySelector(EntitySelectorConfig(domain="media_player", multiple=True))
         if not is_new:
             schema_dict[vol.Optional("_loeschen", default=False)] = BooleanSelector()
 

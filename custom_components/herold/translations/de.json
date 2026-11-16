@@ -72,12 +72,13 @@
       },
       "empfaenger_edit": {
         "title": "Empfänger {modus} — {empfaenger_id}",
-        "description": "Ziel = Notify-Service (z.B. notify.mobile_app_iphone_17_ul). Beim Löschen wird der Empfänger aus allen Rollen entfernt.",
+        "description": "Ziel = Notify-Service (z.B. notify.mobile_app_iphone_17_ul), bei Typ tts die TTS-Engine (z.B. tts.home_assistant_cloud) — dann ist mindestens ein Media-Player Pflicht. Beim Löschen wird der Empfänger aus allen Rollen entfernt.",
         "data": {
           "id": "Empfänger-ID",
           "typ": "Typ",
-          "ziel": "Ziel (domain.service, z.B. notify.mobile_app_xxx)",
+          "ziel": "Ziel (domain.service, z.B. notify.mobile_app_xxx oder tts.home_assistant_cloud)",
           "name": "Anzeigename",
+          "media_player": "Media-Player (nur Typ tts — Lautsprecher, auf denen gesprochen wird)",
           "_loeschen": "⚠️ Diesen Empfänger löschen"
         }
       },
@@ -113,6 +114,7 @@
       "rolle_exists": "Rolle existiert bereits",
       "empfaenger_exists": "Empfänger existiert bereits",
       "invalid_ziel": "Ungültiges Ziel — erwartet wird domain.service (z.B. notify.mobile_app_xxx)",
+      "media_player_required": "Für Typ tts ist mindestens ein Media-Player nötig",
       "rolle_unbekannt": "Rolle ist nicht registriert"
     },
     "abort": {

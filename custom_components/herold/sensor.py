@@ -312,6 +312,9 @@ class HeroldEmpfaengerSensor(HeroldBaseSensor):
                     "typ": e.typ,
                     "ziel": e.ziel,
                     "name": e.name,
+                    # Nur bei typ="tts" gefüllt. Die Admin-Card braucht den
+                    # Wert zum Vorbelegen, sonst speichert sie ihn leer zurück.
+                    "media_player": e.media_player,
                     "rollen": sorted(rollen_je_empf.get(e.id, [])),
                 }
                 for e in sorted(

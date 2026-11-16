@@ -4,6 +4,35 @@ Alle nennenswerten Änderungen an diesem Projekt.
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.1.1] — 2026-11-15
+
+Zwei Bearbeitungswege, die gespeicherte Werte verloren oder gar nicht erst
+erfassten.
+
+### Behoben
+
+- **Options-Flow legte TTS-Empfänger ohne Lautsprecher an.** Der Typ `tts` war
+  wählbar, ein Feld für den `media_player` fehlte — solche Empfänger wurden beim
+  Senden mit `fehler:tts_ohne_media_player` übersprungen, die Ansage blieb aus.
+  Der Schritt „Empfänger bearbeiten" hat jetzt eine Media-Player-Auswahl
+  (mehrere Lautsprecher möglich) und verlangt sie bei Typ `tts`, wie Service und
+  Admin-Card es schon taten.
+- **Admin-Card löschte Beschreibung und Quelle eines Topics beim Bearbeiten.**
+  Beide Felder stehen nicht in den Attributen von `sensor.herold_aktive_topics`,
+  erschienen deshalb leer und wurden leer zurückgespeichert — ein einzelner
+  Override-Edit verwarf, was der Producer registriert hatte. Die Karte lädt das
+  Topic beim Öffnen jetzt über `/api/herold/topics/<id>`.
+- **Admin-Card leerte den `media_player` beim Bearbeiten eines TTS-Empfängers.**
+  `sensor.herold_empfanger` liefert das Feld jetzt mit.
+
+### Geändert
+
+- **Die Admin-Card schickt beim Speichern nur noch geänderte Stammdaten**
+  (Name, Beschreibung, Quelle, Media-Player). Fehlende Felder lassen die
+  Services unangetastet — ein nicht geladener Wert kann damit nichts mehr
+  überschreiben. Ist das Topic nicht ladbar, bleiben Beschreibung und Quelle im
+  Dialog gesperrt.
+
 ## [1.1.0] — 2026-08-31
 
 Lesende REST-API und eine einzige Quelle für Effektivwerte.

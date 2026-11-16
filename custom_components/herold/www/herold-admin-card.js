@@ -12,6 +12,9 @@
  *   - sensor.herold_einstellungen       (Fallback + Retention)
  *   - sensor.herold_unzugeordnete_topics (Warn-Zähler)
  *
+ * Beschreibung und Quelle eines Topics kommen beim Öffnen des Edit-Dialogs
+ * aus der REST-View /api/herold/topics/<id>.
+ *
  * Änderungen gehen direkt über die herold.*-Services und werden durch
  * das `herold_config_updated`-Event live reflektiert.
  */
@@ -532,8 +535,8 @@ class HeroldAdminCard extends HTMLElement {
           form = `
             <div class="readonly"><span class="lbl">ID</span> <span class="mono">${d.id}</span></div>
             <label><span class="lbl-text">Name</span><input id="f-name" type="text" value="${d.name || ""}"></label>
-            <label><span class="lbl-text">Beschreibung</span><textarea id="f-beschreibung">${d.beschreibung || ""}</textarea></label>
-            <label><span class="lbl-text">Quelle</span><input id="f-quelle" type="text" value="${d.quelle || ""}" placeholder="z.B. custom_components.pool"></label>
+            <label><span class="lbl-text">Beschreibung</span>${d.stammdaten_geladen ? "" : ` <span class="hint">(nicht ladbar — bleibt unverändert)</span>`}<textarea id="f-beschreibung" ${d.stammdaten_geladen ? "" : "disabled"}>${d.beschreibung || ""}</textarea></label>
+            <label><span class="lbl-text">Quelle</span>${d.stammdaten_geladen ? "" : ` <span class="hint">(nicht ladbar — bleibt unverändert)</span>`}<input id="f-quelle" type="text" value="${d.quelle || ""}" placeholder="z.B. custom_components.pool" ${d.stammdaten_geladen ? "" : "disabled"}></label>
 
             <div class="section-head">User-Overrides <span class="hint">(leer = Producer-Default greift)</span></div>
 
@@ -829,9 +832,21 @@ class HeroldAdminCard extends HTMLElement {
     return {};
   }
 
-  _openTopicEdit(id) {
+  async _openTopicEdit(id) {
     const t = this._topics().find((x) => x.id === id);
     if (!t) return;
+    // Beschreibung und Quelle stehen nicht in den Sensor-Attributen (Freitext
+    // für jedes Topic würde sie weiter aufblähen) — sie kommen aus der
+    // REST-View. Geladen wird vor dem Öffnen, damit kein späteres Re-Render
+    // Eingaben verwirft. Schlägt das Laden fehl, bleiben beide Felder gesperrt
+    // und werden beim Speichern nicht mitgeschickt.
+    let voll = null;
+    try {
+      const antwort = await this._hass.callApi("GET", `herold/topics/${id}`);
+      if (antwort && antwort.id === id) voll = antwort;
+    } catch (err) {
+      console.warn(`Herold Admin Card: Topic '${id}' nicht ladbar`, err);
+    }
     // Tripel-Felder aus Mapping-Sensor (producer_default | override | wirksam)
     const map = this._mapping().find((m) => m.topic === id) || {};
     const tri = (key, fallback) => {
@@ -846,8 +861,9 @@ class HeroldAdminCard extends HTMLElement {
       daten: {
         id,
         name: t.name || "",
-        beschreibung: t.beschreibung || "",
-        quelle: t.quelle || "",
+        beschreibung: voll ? voll.beschreibung || "" : "",
+        quelle: voll ? voll.quelle || "" : "",
+        stammdaten_geladen: !!voll,
         rollen: tri("rollen", []),
         log_only: tri("log_only", !!t.log_only),
         interruption_level: tri("interruption_level", t.interruption_level || null),
@@ -886,6 +902,7 @@ class HeroldAdminCard extends HTMLElement {
         typ: e.typ || "notify_service",
         ziel: e.ziel || "",
         name: e.name || "",
+        media_player: e.media_player || "",
       },
     };
     this._render();
@@ -944,12 +961,19 @@ class HeroldAdminCard extends HTMLElement {
         });
       } else {
         // Existierend: Producer-Felder via topic_registrieren, Override-Felder via topic_override_setzen
-        const r1 = await this._callService("topic_registrieren", {
-          topic: id,
-          name: get("#f-name")?.value || "",
-          beschreibung: get("#f-beschreibung")?.value || "",
-          quelle: get("#f-quelle")?.value || "",
-        });
+        // Nur geänderte Stammdaten mitschicken: `topic_registrieren` lässt
+        // fehlende Felder unangetastet, ein mitgeschickter Leerstring dagegen
+        // überschreibt, was der Producer registriert hat.
+        const stamm = { topic: id };
+        const felder = [["name", "#f-name"]];
+        if (e.daten.stammdaten_geladen) {
+          felder.push(["beschreibung", "#f-beschreibung"], ["quelle", "#f-quelle"]);
+        }
+        for (const [feld, sel] of felder) {
+          const wert = get(sel)?.value ?? "";
+          if (wert !== (e.daten[feld] || "")) stamm[feld] = wert;
+        }
+        const r1 = await this._callService("topic_registrieren", stamm);
         if (!r1.ok) {
           this._flash(`Fehler (Topic): ${r1.error || "unbekannt"}`, true);
           return;
@@ -986,13 +1010,18 @@ class HeroldAdminCard extends HTMLElement {
       if (typ === "tts" && !mediaPlayer) {
         return this._flash("Media-Player ist Pflicht für typ=tts", true);
       }
-      res = await this._callService("empfaenger_setzen", {
+      const empfDaten = {
         empfaenger: id,
         typ,
         ziel,
         name: get("#f-name")?.value || "",
-        media_player: mediaPlayer,
-      });
+      };
+      // Nur mitschicken, wenn neu oder geändert — `empfaenger_setzen` lässt
+      // ein fehlendes Feld unangetastet, ein Leerstring würde es löschen.
+      if (e.isNeu || mediaPlayer !== (e.daten.media_player || "")) {
+        empfDaten.media_player = mediaPlayer;
+      }
+      res = await this._callService("empfaenger_setzen", empfDaten);
     } else if (e.typ === "mapping") {
       const rollen = multi("#f-override");
       if (rollen.length === 0) {
